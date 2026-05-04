@@ -123,9 +123,9 @@ const INTERVIEWERS: InterviewerProfile[] = [
     name: 'Kazi',
     title: 'The Coach',
     description: 'Warm and natural. A supportive coach who speaks with calm encouragement.',
-    voice: 'xiaochen',
-    speed: 1.15,
-    volume: 0.95,
+    voice: 'kazi',
+    speed: 1.1,
+    volume: 1.2,
     accentColor: 'text-teal-400',
     accentBg: 'bg-teal-400/15',
     accentBorder: 'border-teal-400/60',
@@ -140,7 +140,7 @@ const INTERVIEWERS: InterviewerProfile[] = [
     description: 'Professional and measured. A deep, deliberate voice for realistic corporate interviews.',
     voice: 'xiaochen',
     speed: 1.0,
-    volume: 0.85,
+    volume: 1.4,
     accentColor: 'text-slate-300',
     accentBg: 'bg-slate-400/15',
     accentBorder: 'border-slate-400/60',
@@ -155,7 +155,7 @@ const INTERVIEWERS: InterviewerProfile[] = [
     description: 'Warm and conversational. Makes interviews feel like a relaxed chat over coffee.',
     voice: 'tongtong',
     speed: 1.1,
-    volume: 1.0,
+    volume: 1.3,
     accentColor: 'text-amber-400',
     accentBg: 'bg-amber-400/15',
     accentBorder: 'border-amber-400/60',
@@ -167,10 +167,10 @@ const INTERVIEWERS: InterviewerProfile[] = [
     id: 'james',
     name: 'James',
     title: 'The Executive',
-    description: 'Sharp and commanding. A slow, authoritative voice for high-stakes executive interviews.',
-    voice: 'xiaochen',
-    speed: 0.9,
-    volume: 0.8,
+    description: 'Sharp and commanding. A British-accented authoritative voice for high-stakes executive interviews.',
+    voice: 'jam',
+    speed: 0.95,
+    volume: 1.3,
     accentColor: 'text-violet-400',
     accentBg: 'bg-violet-400/15',
     accentBorder: 'border-violet-400/60',
@@ -182,10 +182,10 @@ const INTERVIEWERS: InterviewerProfile[] = [
     id: 'zanele',
     name: 'Zanele',
     title: 'The Motivator',
-    description: 'Energetic and expressive. A fast, passionate voice that fires you up to do your best.',
-    voice: 'tongtong',
-    speed: 1.3,
-    volume: 1.1,
+    description: 'Energetic and expressive. A passionate, infectious voice that fires you up to do your best.',
+    voice: 'luodo',
+    speed: 1.15,
+    volume: 1.2,
     accentColor: 'text-rose-400',
     accentBg: 'bg-rose-400/15',
     accentBorder: 'border-rose-400/60',
@@ -234,6 +234,46 @@ const scoreRevealVariants = {
     scale: 1,
     transition: { duration: 0.6, ease: [0.25, 0.46, 0.45, 0.94] },
   },
+}
+
+// ─── Fetch with Retry ───────────────────────────────────────────────────────
+// Retries transient network failures (like "Failed to fetch") up to 3 times
+// with exponential backoff before giving up.
+
+async function fetchWithRetry(
+  url: string,
+  options: RequestInit,
+  maxRetries = 3,
+  baseDelay = 500,
+): Promise<Response> {
+  let lastError: Error | null = null
+
+  for (let attempt = 0; attempt < maxRetries; attempt++) {
+    try {
+      const res = await fetch(url, options)
+      // If we get a response (even an error status), return it —
+      // retries are only for network-level failures
+      return res
+    } catch (err) {
+      lastError = err instanceof Error ? err : new Error(String(err))
+      // Only retry on network errors (Failed to fetch, NetworkError, etc.)
+      const isNetworkError =
+        lastError.message.includes('Failed to fetch') ||
+        lastError.message.includes('NetworkError') ||
+        lastError.message.includes('Network request failed') ||
+        lastError.name === 'TypeError'
+
+      if (!isNetworkError || attempt === maxRetries - 1) {
+        throw lastError
+      }
+
+      // Exponential backoff: 500ms, 1000ms, 2000ms...
+      const delay = baseDelay * Math.pow(2, attempt)
+      await new Promise((resolve) => setTimeout(resolve, delay))
+    }
+  }
+
+  throw lastError
 }
 
 // ─── WAV Encoding Utilities ─────────────────────────────────────────────────
@@ -742,7 +782,7 @@ export default function InterviewCoach() {
         oldAudio.pause()
       }
 
-      const res = await fetch('/api/ai/tts', {
+      const res = await fetchWithRetry('/api/ai/tts', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -903,7 +943,7 @@ export default function InterviewCoach() {
           // Convert recorded audio to WAV format for reliable ASR format detection
           const wavBase64 = await convertBlobToWavBase64(audioBlob)
 
-          const asrRes = await fetch('/api/ai/asr', {
+          const asrRes = await fetchWithRetry('/api/ai/asr', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
@@ -1007,7 +1047,7 @@ export default function InterviewCoach() {
     setInterviewDuration(0)
 
     try {
-      const res = await fetch('/api/ai/interview', {
+      const res = await fetchWithRetry('/api/ai/interview', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -1100,7 +1140,7 @@ export default function InterviewCoach() {
         content: msg.content,
       }))
 
-      const res = await fetch('/api/ai/interview', {
+      const res = await fetchWithRetry('/api/ai/interview', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -1298,7 +1338,7 @@ export default function InterviewCoach() {
       setAiTyping(true)
 
       try {
-        const res = await fetch('/api/ai/interview', {
+        const res = await fetchWithRetry('/api/ai/interview', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
