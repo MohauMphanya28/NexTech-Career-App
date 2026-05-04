@@ -387,61 +387,66 @@ export default function InterviewAvatar({
               : { duration: 0.3 }
           }
         >
+          {/* Outer gradient border ring */}
           <div
-            className="relative"
+            className="absolute rounded-full"
             style={{
               width: imageSize,
               height: imageSize,
-              borderRadius: '50%',
-              padding: '3px',
               background: isSpeaking
                 ? `linear-gradient(135deg, ${palette.ringColor1}, ${palette.ringColor2})`
                 : 'linear-gradient(135deg, rgba(255,255,255,0.15), rgba(255,255,255,0.05))',
             }}
+          />
+          {/* Inner image container — slightly smaller to reveal the gradient border behind it */}
+          <div
+            className="absolute overflow-hidden"
+            style={{
+              width: imageSize - 6,
+              height: imageSize - 6,
+              borderRadius: '50%',
+            }}
           >
-            <div
-              className="relative size-full overflow-hidden"
-              style={{ borderRadius: '50%' }}
-            >
-              <Image
-                src={interviewer.image}
-                alt={`${interviewer.name} - ${interviewer.title}`}
-                fill
-                className="object-cover object-center"
-                priority
-                sizes={`${Math.round(imageSize)}px`}
-              />
+            <Image
+              src={interviewer.image}
+              alt={`${interviewer.name} - ${interviewer.title}`}
+              width={imageSize - 6}
+              height={imageSize - 6}
+              className="object-cover"
+              style={{ objectPosition: 'center 20%' }}
+              priority
+              sizes={`${Math.round(imageSize)}px`}
+            />
 
-              {/* ── Speaking overlay: subtle lower-face glow ── */}
-              <AnimatePresence>
-                {isSpeaking && amplitude > 0.05 && (
-                  <motion.div
-                    className="absolute inset-0"
-                    style={{
-                      borderRadius: '50%',
-                      background: `radial-gradient(ellipse 60% 35% at 50% 70%, ${palette.accentGlow} 0%, transparent 70%)`,
-                    }}
-                    initial={{ opacity: 0 }}
-                    animate={{ opacity: amplitude * 0.6 }}
-                    exit={{ opacity: 0 }}
-                    transition={{ duration: 0.15 }}
-                  />
-                )}
-              </AnimatePresence>
-
-              {/* ── Idle: subtle breathing overlay ── */}
-              {!isSpeaking && (
+            {/* ── Speaking overlay: subtle lower-face glow ── */}
+            <AnimatePresence>
+              {isSpeaking && amplitude > 0.05 && (
                 <motion.div
                   className="absolute inset-0"
                   style={{
                     borderRadius: '50%',
-                    background: 'radial-gradient(ellipse 80% 80% at 50% 50%, rgba(255,255,255,0.02) 0%, transparent 70%)',
+                    background: `radial-gradient(ellipse 60% 35% at 50% 70%, ${palette.accentGlow} 0%, transparent 70%)`,
                   }}
-                  animate={{ opacity: [0, 1, 0] }}
-                  transition={{ duration: 4, repeat: Infinity, ease: 'easeInOut' }}
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: amplitude * 0.6 }}
+                  exit={{ opacity: 0 }}
+                  transition={{ duration: 0.15 }}
                 />
               )}
-            </div>
+            </AnimatePresence>
+
+            {/* ── Idle: subtle breathing overlay ── */}
+            {!isSpeaking && (
+              <motion.div
+                className="absolute inset-0"
+                style={{
+                  borderRadius: '50%',
+                  background: 'radial-gradient(ellipse 80% 80% at 50% 50%, rgba(255,255,255,0.02) 0%, transparent 70%)',
+                }}
+                animate={{ opacity: [0, 1, 0] }}
+                transition={{ duration: 4, repeat: Infinity, ease: 'easeInOut' }}
+              />
+            )}
           </div>
         </motion.div>
       </div>

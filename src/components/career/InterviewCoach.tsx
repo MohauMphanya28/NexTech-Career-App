@@ -125,9 +125,9 @@ const INTERVIEWERS: InterviewerProfile[] = [
     name: 'Kazi',
     title: 'The Coach',
     description: 'Warm and natural with a Cape Town accent. Uses SA slang like "ja" and "lekker" while coaching you to success.',
-    voice: 'douji',
-    speed: 1.05,
-    volume: 1.4,
+    voice: 'kazi',
+    speed: 1.0,
+    volume: 1.2,
     accentColor: 'text-teal-400',
     accentBg: 'bg-teal-400/15',
     accentBorder: 'border-teal-400/60',
@@ -143,7 +143,7 @@ const INTERVIEWERS: InterviewerProfile[] = [
     description: 'Professional and measured with a Jozi corporate accent. Direct, no-nonsense, and sharp.',
     voice: 'xiaochen',
     speed: 1.0,
-    volume: 1.4,
+    volume: 1.2,
     accentColor: 'text-slate-300',
     accentBg: 'bg-slate-400/15',
     accentBorder: 'border-slate-400/60',
@@ -158,8 +158,8 @@ const INTERVIEWERS: InterviewerProfile[] = [
     title: 'The Friendly',
     description: 'Warm and conversational with a Durban accent. Says "hey?" and "shame" — makes interviews feel like coffee chat.',
     voice: 'tongtong',
-    speed: 1.1,
-    volume: 1.3,
+    speed: 1.0,
+    volume: 1.2,
     accentColor: 'text-amber-400',
     accentBg: 'bg-amber-400/15',
     accentBorder: 'border-amber-400/60',
@@ -173,9 +173,9 @@ const INTERVIEWERS: InterviewerProfile[] = [
     name: 'James',
     title: 'The Executive',
     description: 'Sharp and commanding with a crisp British RP accent. Slow, deliberate, and authoritative.',
-    voice: 'xiaochen',
-    speed: 0.8,
-    volume: 1.5,
+    voice: 'jam',
+    speed: 0.9,
+    volume: 1.2,
     accentColor: 'text-violet-400',
     accentBg: 'bg-violet-400/15',
     accentBorder: 'border-violet-400/60',
@@ -189,9 +189,9 @@ const INTERVIEWERS: InterviewerProfile[] = [
     name: 'Zanele',
     title: 'The Motivator',
     description: 'Fiery and passionate with a vibrant Soweto accent. Says "Hayi bo!" and "Asambe!" — pure energy!',
-    voice: 'tongtong',
-    speed: 1.25,
-    volume: 1.5,
+    voice: 'luodo',
+    speed: 1.1,
+    volume: 1.2,
     accentColor: 'text-rose-400',
     accentBg: 'bg-rose-400/15',
     accentBorder: 'border-rose-400/60',
@@ -901,11 +901,10 @@ export default function InterviewCoach() {
     isMutedRef.current = isMuted
   }, [isMuted])
 
-  // When audio actually starts playing (isAiSpeaking=true), clear "thinking" state
-  // since the AI is no longer "thinking" — it's actively speaking
+  // When audio actually starts playing, clear isLoading (but NOT aiTyping —
+  // that should already be cleared when the LLM response text arrives)
   useEffect(() => {
     if (isAiSpeaking) {
-      setAiTyping(false)
       setIsLoading(false)
     }
   }, [isAiSpeaking])
@@ -1089,9 +1088,13 @@ export default function InterviewCoach() {
           timestamp: Date.now(),
         }
         setMessages([welcomeMsg])
+        // Clear "thinking" state immediately — the text is now visible.
+        // Audio will follow shortly via playTTS, and isAiSpeaking will be
+        // set true only when the audio actually starts playing.
+        setAiTyping(false)
 
-        // Auto-speak the first question — await so aiTyping stays true until audio plays
-        await playTTS(data.question)
+        // Auto-speak the first question (don't await — let it play in background)
+        playTTS(data.question)
 
         // Create session in store
         setInterviewSession({
@@ -1204,6 +1207,12 @@ export default function InterviewCoach() {
         }
         setMessages((prev) => [...prev, feedbackMsg])
 
+        // Clear "thinking" state immediately — the text is now visible.
+        // Audio will follow via playTTS, and isAiSpeaking will be set true
+        // only when the audio actually starts playing (not during the TTS fetch).
+        setAiTyping(false)
+        setIsSending(false)
+
         // Check if interview is complete
         if (data.isComplete || questionNum >= questionCount) {
           // Interview complete - add closing message
@@ -1216,7 +1225,7 @@ export default function InterviewCoach() {
           }
           setMessages((prev) => [...prev, closingMsg])
 
-          // Speak closing message immediately
+          // Speak closing message (non-blocking)
           playTTS(closingContent)
 
           // Calculate final scores from the updated live scores
@@ -1256,8 +1265,7 @@ export default function InterviewCoach() {
             return currentLiveScores // Don't modify — just read for final calculation
           })
         } else {
-          // Speak the full conversational feedback immediately (includes reaction + transition + question)
-          // This is more natural than speaking just the next question separately
+          // Speak the full conversational feedback (non-blocking — audio plays when ready)
           playTTS(feedbackText)
 
           // Add next question to chat display after a brief pause for visual flow
@@ -1272,8 +1280,6 @@ export default function InterviewCoach() {
             }
             setMessages((prev) => [...prev, nextMsg])
             setCurrentQuestionNum((prev) => prev + 1)
-            setAiTyping(false)
-            setIsSending(false)
           }, 400)
           return
         }
@@ -1290,8 +1296,9 @@ export default function InterviewCoach() {
       playTTS(errorMsg.content)
     } finally {
       // Only clear loading states if we're NOT waiting for the next question timeout
-      // (the timeout callback will handle clearing them)
       if (!isWaitingForNextQuestion) {
+        // Note: aiTyping and isSending may already be cleared above,
+        // but this ensures they're reset even on error paths
         setAiTyping(false)
         setIsSending(false)
       }
@@ -1371,17 +1378,19 @@ export default function InterviewCoach() {
         })
         const data = await res.json()
         if (data.success) {
-          setTimeout(() => {
-            const nextMsg: ChatMessage = {
-              id: `ai-${Date.now()}`,
-              role: 'ai',
-              content: data.question,
-              timestamp: Date.now(),
-            }
-            setMessages((prev) => [...prev, nextMsg])
-            setCurrentQuestionNum((prev) => prev + 1)
-            playTTS(data.question)
-          }, 200)
+          const nextMsg: ChatMessage = {
+            id: `ai-${Date.now()}`,
+            role: 'ai',
+            content: data.question,
+            timestamp: Date.now(),
+          }
+          setMessages((prev) => [...prev, nextMsg])
+          setCurrentQuestionNum((prev) => prev + 1)
+          // Clear "thinking" state — text is visible, audio will follow
+          setAiTyping(false)
+          setIsSending(false)
+          // Play TTS in background (non-blocking)
+          playTTS(data.question)
         }
       } catch {
         const nextMsg: ChatMessage = {

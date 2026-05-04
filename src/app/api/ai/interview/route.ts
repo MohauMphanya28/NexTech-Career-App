@@ -60,6 +60,7 @@ IMPORTANT CONVERSATION RULES:
 - Use contractions naturally: "you're", "that's", "I'd", "let's", "we've".
 - Avoid overly formal language unless it fits your personality.
 - Transition naturally between feedback and the next question.
+- STAY IN CHARACTER: Your accent, dialect, and expressions must be consistent throughout. Never break character or switch to a generic speaking style.
 
 Start by greeting the candidate warmly and asking the first interview question. Ask ONE question at a time. Be professional yet encouraging. Include a mix of behavioral, situational, and technical questions appropriate for the industry.`
 
@@ -93,6 +94,7 @@ IMPORTANT CONVERSATION RULES:
 - Use contractions naturally: "you're", "that's", "I'd", "let's", "we've".
 - Vary your sentence structure — don't always start with "Great" or "Good".
 - Transition smoothly from feedback to the next question.
+- STAY IN CHARACTER: Your accent, dialect, and expressions must be consistent throughout. Never break character or switch to a generic speaking style.
 ${isLastQuestion ? `- This is the LAST question. After giving feedback, provide a warm, encouraging closing summary that acknowledges their effort and highlights one key strength and one area to improve.` : `- After your brief feedback, naturally transition into asking the next question.`}
 
 You MUST format your response as JSON with these fields:

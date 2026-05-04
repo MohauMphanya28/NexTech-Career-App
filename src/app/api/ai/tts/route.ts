@@ -208,65 +208,87 @@ export async function POST(req: NextRequest) {
     // Clamp parameters to valid ranges
     // Speed: 0.5–2.0 (higher = faster speech)
     const clampedSpeed = Math.max(0.5, Math.min(2.0, speed))
-    // Volume: 0.1–3.0 (higher values cause distortion/robotic sound)
-    // Previously used up to 10.0 which made voices sound metallic
-    const clampedVolume = Math.max(0.1, Math.min(3.0, volume))
+    // Volume: 0.1–2.0 (higher values cause distortion/robotic sound)
+    // Keep volume moderate — the browser can amplify if needed
+    const clampedVolume = Math.max(0.1, Math.min(2.0, volume))
 
-    // Use wav format (the most reliably supported format for the TTS API)
-    // If text is within limit, single request
-    if (processedText.length <= 1000) {
-      const response = await zai.audio.tts.create({
-        input: processedText,
-        voice: voice as TTSVoice,
-        speed: clampedSpeed,
-        volume: clampedVolume,
-        response_format: 'wav',
-        stream: false,
-      } as any)
+    // Use mp3 format — most broadly supported and no header manipulation needed
+    // for concatenation (MP3 frames can be simply joined).
+    // Try mp3 first; if it fails, fall back to wav.
+    const formats = ['mp3', 'wav'] as const
+    let lastFormatError: Error | null = null
 
-      const arrayBuffer = await response.arrayBuffer()
-      const buffer = Buffer.from(new Uint8Array(arrayBuffer))
+    for (const fmt of formats) {
+      try {
+        // If text is within limit, single request
+        if (processedText.length <= 1000) {
+          const response = await zai.audio.tts.create({
+            input: processedText,
+            voice: voice as TTSVoice,
+            speed: clampedSpeed,
+            volume: clampedVolume,
+            response_format: fmt,
+            stream: false,
+          } as any)
 
-      return new NextResponse(buffer, {
-        status: 200,
-        headers: {
-          'Content-Type': 'audio/wav',
-          'Content-Length': buffer.length.toString(),
-          'Cache-Control': 'public, max-age=3600',
-        },
-      })
+          const arrayBuffer = await response.arrayBuffer()
+          const buffer = Buffer.from(new Uint8Array(arrayBuffer))
+
+          return new NextResponse(buffer, {
+            status: 200,
+            headers: {
+              'Content-Type': fmt === 'mp3' ? 'audio/mpeg' : 'audio/wav',
+              'Content-Length': buffer.length.toString(),
+              'Cache-Control': 'public, max-age=3600',
+            },
+          })
+        }
+
+        // For longer text, split into chunks and concatenate
+        const chunks = splitTextIntoChunks(processedText)
+        const audioBuffers: Buffer[] = []
+
+        for (const chunk of chunks) {
+          if (chunk.length === 0) continue
+          const response = await zai.audio.tts.create({
+            input: chunk,
+            voice: voice as TTSVoice,
+            speed: clampedSpeed,
+            volume: clampedVolume,
+            response_format: fmt,
+            stream: false,
+          } as any)
+
+          const arrayBuffer = await response.arrayBuffer()
+          audioBuffers.push(Buffer.from(new Uint8Array(arrayBuffer)))
+        }
+
+        let combinedBuffer: Buffer
+        if (fmt === 'mp3') {
+          // MP3 frames can be concatenated directly — no header manipulation needed
+          combinedBuffer = Buffer.concat(audioBuffers)
+        } else {
+          // WAV needs proper header management
+          combinedBuffer = concatWavBuffers(audioBuffers)
+        }
+
+        return new NextResponse(combinedBuffer, {
+          status: 200,
+          headers: {
+            'Content-Type': fmt === 'mp3' ? 'audio/mpeg' : 'audio/wav',
+            'Content-Length': combinedBuffer.length.toString(),
+            'Cache-Control': 'public, max-age=3600',
+          },
+        })
+      } catch (fmtError) {
+        lastFormatError = fmtError instanceof Error ? fmtError : new Error(String(fmtError))
+        console.warn(`TTS format '${fmt}' failed, trying next format:`, lastFormatError.message)
+        // Continue to next format
+      }
     }
 
-    // For longer text, split into chunks and concatenate as valid WAV
-    const chunks = splitTextIntoChunks(processedText)
-    const audioBuffers: Buffer[] = []
-
-    for (const chunk of chunks) {
-      if (chunk.length === 0) continue
-      const response = await zai.audio.tts.create({
-        input: chunk,
-        voice: voice as TTSVoice,
-        speed: clampedSpeed,
-        volume: clampedVolume,
-        response_format: 'wav',
-        stream: false,
-      } as any)
-
-      const arrayBuffer = await response.arrayBuffer()
-      audioBuffers.push(Buffer.from(new Uint8Array(arrayBuffer)))
-    }
-
-    // Properly concatenate WAV files (strip headers from subsequent chunks)
-    const combinedBuffer = concatWavBuffers(audioBuffers)
-
-    return new NextResponse(combinedBuffer, {
-      status: 200,
-      headers: {
-        'Content-Type': 'audio/wav',
-        'Content-Length': combinedBuffer.length.toString(),
-        'Cache-Control': 'public, max-age=3600',
-      },
-    })
+    // All formats failed
+    throw lastFormatError || new Error('All TTS format attempts failed')
   } catch (error) {
     console.error('TTS API Error:', error)
     return NextResponse.json(
