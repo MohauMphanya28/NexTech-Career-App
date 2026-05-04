@@ -104,7 +104,7 @@ export async function POST(req: NextRequest) {
     if (trimmedText.length <= 1000) {
       const response = await zai.audio.tts.create({
         input: trimmedText,
-        voice: voice as 'kazi',
+        voice: voice as 'kazi' | 'xiaochen' | 'tongtong' | 'jam' | 'luodo',
         speed: Math.max(0.5, Math.min(2.0, speed)),
         response_format: 'wav',
         stream: false,
@@ -131,7 +131,7 @@ export async function POST(req: NextRequest) {
       if (chunk.length === 0) continue
       const response = await zai.audio.tts.create({
         input: chunk,
-        voice: voice as 'kazi',
+        voice: voice as 'kazi' | 'xiaochen' | 'tongtong' | 'jam' | 'luodo',
         speed: Math.max(0.5, Math.min(2.0, speed)),
         response_format: 'wav',
         stream: false,

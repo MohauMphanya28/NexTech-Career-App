@@ -257,3 +257,41 @@ Stage Summary:
 - ASR reliability improved with explicit `format: 'wav'` hint
 - Frontend gracefully handles TTS failures — interview always continues
 - WAV concatenation properly handles long text chunks
+
+---
+Task ID: 12
+Agent: full-stack-developer
+Task: Auto-unmute interviewer audio & add interviewer avatars with distinct voices/tones
+
+Work Log:
+- Added InterviewerProfile interface and INTERVIEWERS constant with 5 distinct interviewer personas:
+  - Kazi (The Coach) — voice: kazi, teal accent, supportive/encouraging
+  - Thabo (The Corporate) — voice: xiaochen, slate accent, professional/direct
+  - Naledi (The Friendly) — voice: tongtong, amber accent, warm/conversational
+  - James (The Executive) — voice: jam, violet accent, formal/demanding
+  - Zanele (The Motivator) — voice: luodo, rose accent, energetic/passionate
+- Added selectedInterviewer state (defaults to Kazi) and audioContextRef for browser audio unlock
+- Added unlockAudio() function that creates/resumes an AudioContext and plays a silent buffer on user gesture
+- Modified handleStartInterview to call unlockAudio() BEFORE any TTS calls (first user gesture unlocks browser audio)
+- Modified playTTS to use selectedInterviewer.voice instead of hardcoded 'kazi'
+- Added AudioContext resume check before audio.play() in playTTS to handle autoplay policy
+- Modified handleStartInterview, sendAnswer, and handleSkipQuestion to pass interviewerPersonality and interviewerName to the interview API
+- Added interviewer selection UI to setup screen with avatar cards (gradient circle with initials, name, title, description, checkmark)
+- Updated interview mode UI:
+  - Top bar shows interviewer initials instead of headphones icon, with interviewer name in title
+  - AI speaking overlay shows interviewer name instead of generic "Interviewer"
+  - AI chat messages show interviewer avatar (gradient circle with initials) and accent-colored border
+  - Feedback messages use interviewer accent background
+  - Replay button uses interviewer accent color
+- Added audioContext cleanup in handleReset (close and null the AudioContext)
+- Modified /api/ai/interview/route.ts to accept and use interviewerPersonality and interviewerName parameters in system prompts for both 'start' and 'evaluate' actions
+- Updated /api/ai/tts/route.ts voice type cast from 'kazi' to 'kazi' | 'xiaochen' | 'tongtong' | 'jam' | 'luodo'
+- Verified: All changes compile successfully, no errors in dev server logs
+
+Stage Summary:
+- Browser audio autoplay policy handled by unlocking AudioContext on first user gesture
+- 5 distinct interviewer personas with unique voices, colors, and personality styles
+- Interviewer avatar selection UI in setup screen
+- Interview chat UI dynamically uses selected interviewer's accent colors and avatar
+- AI LLM adopts interviewer personality through system prompt instructions
+- Audio context properly cleaned up on interview reset

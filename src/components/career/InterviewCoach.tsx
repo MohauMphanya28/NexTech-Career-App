@@ -95,6 +95,90 @@ const INDUSTRY_ICONS: Record<string, string> = {
   General: '🌟',
 }
 
+// ─── Interviewer Avatars ─────────────────────────────────────────────────
+
+interface InterviewerProfile {
+  id: string
+  name: string
+  title: string
+  description: string
+  voice: string
+  accentColor: string
+  accentBg: string
+  accentBorder: string
+  avatarGradient: string
+  initials: string
+  personality: string
+}
+
+const INTERVIEWERS: InterviewerProfile[] = [
+  {
+    id: 'kazi',
+    name: 'Kazi',
+    title: 'The Coach',
+    description: 'Supportive and clear. Perfect for building confidence with encouraging feedback.',
+    voice: 'kazi',
+    accentColor: 'text-teal-400',
+    accentBg: 'bg-teal-400/15',
+    accentBorder: 'border-teal-400/60',
+    avatarGradient: 'from-teal-400 to-cyan-400',
+    initials: 'KZ',
+    personality: 'You are Kazi, a supportive and encouraging interview coach. You ask clear questions, give warm and constructive feedback, and celebrate improvements. You speak in a friendly, approachable tone while maintaining professionalism. You often add words of encouragement like "Great start!" or "You\'re making good progress!"',
+  },
+  {
+    id: 'thabo',
+    name: 'Thabo',
+    title: 'The Corporate',
+    description: 'Professional and direct. Challenges you with tough, realistic corporate questions.',
+    voice: 'xiaochen',
+    accentColor: 'text-slate-300',
+    accentBg: 'bg-slate-400/15',
+    accentBorder: 'border-slate-400/60',
+    avatarGradient: 'from-slate-300 to-slate-500',
+    initials: 'TH',
+    personality: 'You are Thabo, a senior corporate HR director. You ask sharp, probing questions that challenge candidates to think deeply. You give direct, no-nonsense feedback focused on professionalism and business impact. You maintain a formal, business-like tone and expect structured, concise answers.',
+  },
+  {
+    id: 'naledi',
+    name: 'Naledi',
+    title: 'The Friendly',
+    description: 'Warm and conversational. Makes interviews feel like a relaxed chat over coffee.',
+    voice: 'tongtong',
+    accentColor: 'text-amber-400',
+    accentBg: 'bg-amber-400/15',
+    accentBorder: 'border-amber-400/60',
+    avatarGradient: 'from-amber-400 to-orange-400',
+    initials: 'NL',
+    personality: 'You are Naledi, a warm and friendly interviewer who puts candidates at ease. You ask questions in a conversational, story-telling way. Your feedback is gentle and supportive, like a mentor who genuinely cares. You often share relatable examples and use phrases like "Tell me about a time..." or "I\'d love to hear about..."',
+  },
+  {
+    id: 'james',
+    name: 'James',
+    title: 'The Executive',
+    description: 'Formal and demanding. Prepare for tough executive-level interview questions.',
+    voice: 'jam',
+    accentColor: 'text-violet-400',
+    accentBg: 'bg-violet-400/15',
+    accentBorder: 'border-violet-400/60',
+    avatarGradient: 'from-violet-400 to-purple-500',
+    initials: 'JM',
+    personality: 'You are James, a seasoned C-suite executive who conducts high-stakes interviews. You ask demanding, strategic questions that test leadership thinking. Your feedback is crisp, analytical, and focused on executive presence. You expect candidates to demonstrate vision, decisiveness, and business acumen.',
+  },
+  {
+    id: 'zanele',
+    name: 'Zanele',
+    title: 'The Motivator',
+    description: 'Energetic and passionate. Pushes you to bring your absolute best to every answer.',
+    voice: 'luodo',
+    accentColor: 'text-rose-400',
+    accentBg: 'bg-rose-400/15',
+    accentBorder: 'border-rose-400/60',
+    avatarGradient: 'from-rose-400 to-pink-500',
+    initials: 'ZN',
+    personality: 'You are Zanele, a passionate and energetic career coach who brings fire to every interview. You push candidates to dig deeper and aim higher. Your feedback is enthusiastic and action-oriented. You use powerful, motivating language like "You have so much potential!" and "Let\'s take this to the next level!"',
+  },
+]
+
 // ─── Animation Variants ─────────────────────────────────────────────────────
 
 const fadeInUp = {
@@ -492,6 +576,12 @@ export default function InterviewCoach() {
   const [showMuted, setShowMuted] = useState(false)
   const [interviewDuration, setInterviewDuration] = useState(0)
 
+  // Interviewer state
+  const [selectedInterviewer, setSelectedInterviewer] = useState<InterviewerProfile>(INTERVIEWERS[0])
+
+  // Audio unlock ref for autoplay policy
+  const audioContextRef = useRef<AudioContext | null>(null)
+
   // Refs
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLInputElement>(null)
@@ -552,6 +642,30 @@ export default function InterviewCoach() {
     }
   }, [mode, isSending, inputMode])
 
+  // ─── Unlock Browser Audio ────────────────────────────────────────────
+  // Browsers block audio.play() in callbacks unless unlocked by a user gesture.
+  // We unlock on the "Start Interview" button click so all subsequent TTS plays work.
+
+  const unlockAudio = useCallback(() => {
+    try {
+      if (!audioContextRef.current) {
+        const ctx = new AudioContext()
+        audioContextRef.current = ctx
+      }
+      if (audioContextRef.current.state === 'suspended') {
+        audioContextRef.current.resume()
+      }
+      // Play a silent buffer to fully unlock the audio pipeline
+      const buffer = audioContextRef.current.createBuffer(1, 1, 22050)
+      const source = audioContextRef.current.createBufferSource()
+      source.buffer = buffer
+      source.connect(audioContextRef.current.destination)
+      source.start(0)
+    } catch (e) {
+      console.warn('Audio unlock failed:', e)
+    }
+  }, [])
+
   // ─── Play TTS Audio ──────────────────────────────────────────────────
 
   const playTTS = useCallback(async (text: string): Promise<void> => {
@@ -567,7 +681,7 @@ export default function InterviewCoach() {
       const res = await fetch('/api/ai/tts', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ text, voice: 'kazi', speed: 1.0 }),
+        body: JSON.stringify({ text, voice: selectedInterviewer.voice, speed: 1.0 }),
       })
 
       if (!res.ok) {
@@ -603,12 +717,17 @@ export default function InterviewCoach() {
         currentAudioRef.current = null
       }
 
+      // Ensure audio context is active (handles browser autoplay policy)
+      if (audioContextRef.current && audioContextRef.current.state === 'suspended') {
+        await audioContextRef.current.resume()
+      }
+
       await audio.play()
     } catch (error) {
       console.error('TTS playback error:', error)
       setIsAiSpeaking(false)
     }
-  }, [])
+  }, [selectedInterviewer])
 
   // ─── Stop TTS Audio ──────────────────────────────────────────────────
 
@@ -775,6 +894,9 @@ export default function InterviewCoach() {
   // ─── Start Interview ─────────────────────────────────────────────────
 
   const handleStartInterview = async () => {
+    // Unlock browser audio on user gesture BEFORE any TTS calls
+    unlockAudio()
+
     setIsLoading(true)
     setAiTyping(true)
     setMode('interview')
@@ -791,6 +913,8 @@ export default function InterviewCoach() {
           action: 'start',
           industry: selectedIndustry,
           totalQuestions: questionCount,
+          interviewerPersonality: selectedInterviewer.personality,
+          interviewerName: selectedInterviewer.name,
         }),
       })
 
@@ -880,6 +1004,8 @@ export default function InterviewCoach() {
           questionNumber: questionNum,
           answer,
           totalQuestions: questionCount,
+          interviewerPersonality: selectedInterviewer.personality,
+          interviewerName: selectedInterviewer.name,
         }),
       })
 
@@ -1068,6 +1194,8 @@ export default function InterviewCoach() {
             action: 'start',
             industry: selectedIndustry,
             totalQuestions: questionCount,
+            interviewerPersonality: selectedInterviewer.personality,
+            interviewerName: selectedInterviewer.name,
           }),
         })
         const data = await res.json()
@@ -1170,6 +1298,11 @@ export default function InterviewCoach() {
     if (recordingTimeoutRef.current) {
       clearTimeout(recordingTimeoutRef.current)
       recordingTimeoutRef.current = null
+    }
+    // Clean up audio context
+    if (audioContextRef.current) {
+      audioContextRef.current.close()
+      audioContextRef.current = null
     }
     setMode('setup')
     setMessages([])
@@ -1328,6 +1461,62 @@ export default function InterviewCoach() {
                   whileTap={{ scale: 0.95 }}
                 >
                   {count}
+                </motion.button>
+              )
+            })}
+          </div>
+        </motion.section>
+
+        {/* Interviewer Selection */}
+        <motion.section variants={fadeInUp}>
+          <label className="mb-3 block text-sm font-semibold uppercase tracking-wider text-muted-foreground">
+            Choose Your Interviewer
+          </label>
+          <div className="flex flex-col gap-3">
+            {INTERVIEWERS.map((interviewer) => {
+              const isSelected = selectedInterviewer.id === interviewer.id
+              return (
+                <motion.button
+                  key={interviewer.id}
+                  onClick={() => setSelectedInterviewer(interviewer)}
+                  className={`
+                    flex items-center gap-4 rounded-2xl p-4 text-left
+                    transition-all duration-200 active:scale-[0.98]
+                    ${
+                      isSelected
+                        ? `border ${interviewer.accentBorder} ${interviewer.accentBg} shadow-sm`
+                        : 'border border-border/50 bg-secondary/40 hover:border-border hover:bg-secondary/60'
+                    }
+                  `}
+                  whileHover={{ scale: 1.01 }}
+                  whileTap={{ scale: 0.98 }}
+                >
+                  {/* Avatar */}
+                  <div className={`
+                    flex size-12 shrink-0 items-center justify-center rounded-full
+                    bg-gradient-to-br ${interviewer.avatarGradient}
+                    shadow-lg
+                  `}>
+                    <span className="text-sm font-bold text-white">{interviewer.initials}</span>
+                  </div>
+                  {/* Info */}
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2">
+                      <span className={`text-sm font-bold ${isSelected ? interviewer.accentColor : 'text-foreground'}`}>
+                        {interviewer.name}
+                      </span>
+                      <span className="text-xs text-muted-foreground">{interviewer.title}</span>
+                    </div>
+                    <p className="mt-0.5 text-xs text-foreground/60 line-clamp-2">{interviewer.description}</p>
+                  </div>
+                  {/* Check mark */}
+                  {isSelected && (
+                    <div className={`flex size-6 shrink-0 items-center justify-center rounded-full ${interviewer.accentBg}`}>
+                      <svg className={`size-4 ${interviewer.accentColor}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                      </svg>
+                    </div>
+                  )}
                 </motion.button>
               )
             })}
@@ -1725,11 +1914,11 @@ export default function InterviewCoach() {
       <div className="sticky top-0 z-10 border-b border-border/30 bg-background/90 px-4 pb-3 pt-4 backdrop-blur-md">
         <div className="mb-3 flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <div className="relative flex size-10 items-center justify-center rounded-2xl bg-teal-400/15">
-              <Headphones className="size-5 text-teal-400" />
+            <div className={`relative flex size-10 items-center justify-center rounded-2xl ${selectedInterviewer.accentBg}`}>
+              <span className={`text-sm font-bold ${selectedInterviewer.accentColor}`}>{selectedInterviewer.initials}</span>
               {isAiSpeaking && (
                 <motion.div
-                  className="absolute -right-0.5 -top-0.5 size-3 rounded-full bg-teal-400"
+                  className={`absolute -right-0.5 -top-0.5 size-3 rounded-full ${selectedInterviewer.accentColor.replace('text-', 'bg-')}`}
                   animate={{ scale: [1, 1.3, 1], opacity: [1, 0.7, 1] }}
                   transition={{ duration: 0.8, repeat: Infinity }}
                 />
@@ -1737,7 +1926,7 @@ export default function InterviewCoach() {
             </div>
             <div>
               <p className="text-sm font-semibold text-foreground">
-                {selectedIndustry} Interview
+                {selectedInterviewer.name} — {selectedIndustry}
               </p>
               <div className="flex items-center gap-2 text-xs text-muted-foreground">
                 <span>Q{currentQuestionNum}/{questionCount}</span>
@@ -1828,11 +2017,11 @@ export default function InterviewCoach() {
             exit={{ opacity: 0, height: 0 }}
             transition={{ duration: 0.3 }}
           >
-            <div className="flex size-8 items-center justify-center rounded-full bg-teal-400/20">
-              <Volume2 className="size-4 text-teal-400" />
+            <div className={`flex size-8 items-center justify-center rounded-full ${selectedInterviewer.accentBg}`}>
+              <Volume2 className={`size-4 ${selectedInterviewer.accentColor}`} />
             </div>
             <div className="flex flex-col">
-              <span className="text-xs font-semibold text-teal-400">Interviewer is speaking...</span>
+              <span className={`text-xs font-semibold ${selectedInterviewer.accentColor}`}>{selectedInterviewer.name} is speaking...</span>
               <AiSpeakingIndicator />
             </div>
             <motion.button
@@ -1884,17 +2073,17 @@ export default function InterviewCoach() {
                     animate="visible"
                     className="flex items-start gap-2"
                   >
-                    <div className="flex size-8 shrink-0 items-center justify-center rounded-full bg-teal-400/15">
-                      <Headphones className="size-4 text-teal-400" />
+                    <div className="flex size-8 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-teal-400 to-cyan-400">
+                      <span className="text-[10px] font-bold text-white">{selectedInterviewer.initials}</span>
                     </div>
-                    <div className="max-w-[80%] rounded-2xl rounded-tl-sm border-l-2 border-teal-400 bg-secondary/60 px-4 py-3">
+                    <div className={`max-w-[80%] rounded-2xl rounded-tl-sm border-l-2 ${selectedInterviewer.accentBorder} bg-secondary/60 px-4 py-3`}>
                       <p className="text-sm leading-relaxed text-foreground/90">
                         {msg.content}
                       </p>
                       {/* Replay button */}
                       <button
                         onClick={() => handleReplayAudio(msg)}
-                        className="mt-2 flex items-center gap-1.5 text-[11px] text-teal-400/70 transition-colors hover:text-teal-400"
+                        className={`mt-2 flex items-center gap-1.5 text-[11px] ${selectedInterviewer.accentColor}/70 transition-colors hover:${selectedInterviewer.accentColor}`}
                         aria-label={isAiSpeaking ? 'Stop audio' : 'Replay audio'}
                       >
                         {isAiSpeaking ? (
@@ -1943,7 +2132,7 @@ export default function InterviewCoach() {
                     animate="visible"
                     className="flex flex-col items-center gap-2 py-1"
                   >
-                    <div className="flex max-w-[90%] items-start gap-2 rounded-2xl bg-teal-400/5 px-4 py-3 ring-1 ring-teal-400/20">
+                    <div className={`flex max-w-[90%] items-start gap-2 rounded-2xl ${selectedInterviewer.accentBg} px-4 py-3 ring-1 ring-${selectedInterviewer.accentColor.replace('text-', '')}/20`}>
                       <Star className="mt-0.5 size-4 shrink-0 text-yellow-400" />
                       <div>
                         <p className="text-xs leading-relaxed text-foreground/75">

@@ -12,16 +12,22 @@ async function getZAI() {
 
 export async function POST(req: NextRequest) {
   try {
-    const { action, industry, questionNumber, answer, totalQuestions } = await req.json()
+    const { action, industry, questionNumber, answer, totalQuestions, interviewerPersonality, interviewerName } = await req.json()
 
     const zai = await getZAI()
+
+    // Build personality-aware system prompt
+    const personalityInstruction = interviewerPersonality
+      ? `${interviewerPersonality} `
+      : ''
+    const namePrefix = interviewerName ? `Your name is ${interviewerName}. ` : ''
 
     if (action === 'start') {
       const completion = await zai.chat.completions.create({
         messages: [
           {
             role: 'assistant',
-            content: `You are conducting a mock interview for a ${industry || 'general'} position in South Africa. Start by greeting the candidate warmly and asking the first interview question. Ask ONE question at a time. Be professional yet encouraging. Include a mix of behavioral, situational, and technical questions appropriate for the industry.`
+            content: `${personalityInstruction}${namePrefix}You are conducting a mock interview for a ${industry || 'general'} position in South Africa. Start by greeting the candidate warmly and asking the first interview question. Ask ONE question at a time. Be professional yet encouraging. Include a mix of behavioral, situational, and technical questions appropriate for the industry.`
           },
           {
             role: 'user',
@@ -40,7 +46,7 @@ export async function POST(req: NextRequest) {
         messages: [
           {
             role: 'assistant',
-            content: `You are an expert interview coach. Evaluate the candidate's answer briefly and constructively, then ask the next question. Format your response as JSON: { "feedback": "brief constructive feedback, 2-3 sentences", "scores": { "relevance": 0-10, "clarity": 0-10, "confidence": 0-10 }, "nextQuestion": "the next interview question" }. If this is the last question, set nextQuestion to empty string and include a "closingMessage" field with encouraging final feedback.`
+            content: `${personalityInstruction}${namePrefix}You are an expert interview coach. Evaluate the candidate's answer briefly and constructively, then ask the next question. Format your response as JSON: { "feedback": "brief constructive feedback, 2-3 sentences", "scores": { "relevance": 0-10, "clarity": 0-10, "confidence": 0-10 }, "nextQuestion": "the next interview question" }. If this is the last question, set nextQuestion to empty string and include a "closingMessage" field with encouraging final feedback.`
           },
           {
             role: 'user',
