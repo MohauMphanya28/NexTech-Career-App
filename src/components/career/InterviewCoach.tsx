@@ -4,6 +4,7 @@ import { useState, useRef, useEffect, useCallback } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
   Mic,
+  MicOff,
   Send,
   SkipForward,
   RotateCcw,
@@ -14,6 +15,13 @@ import {
   Award,
   ArrowLeft,
   TrendingUp,
+  Volume2,
+  VolumeX,
+  Keyboard,
+  Phone,
+  PhoneOff,
+  Clock,
+  Headphones,
 } from 'lucide-react'
 import { useAppStore } from '@/lib/store'
 import { Button } from '@/components/ui/button'
@@ -25,6 +33,7 @@ import { Badge } from '@/components/ui/badge'
 // ─── Types ───────────────────────────────────────────────────────────────────
 
 type InterviewMode = 'setup' | 'interview' | 'results'
+type InputMode = 'voice' | 'text'
 
 interface ChatMessage {
   id: string
@@ -36,6 +45,7 @@ interface ChatMessage {
     clarity: number
     confidence: number
   }
+  audioUrl?: string
 }
 
 interface LiveScores {
@@ -168,7 +178,6 @@ function CircularScore({
   return (
     <div className="relative inline-flex items-center justify-center">
       <svg width={size} height={size} className="-rotate-90">
-        {/* Background track */}
         <circle
           cx={center}
           cy={center}
@@ -177,7 +186,6 @@ function CircularScore({
           stroke="oklch(0.2 0.02 260)"
           strokeWidth={strokeWidth}
         />
-        {/* Score arc */}
         <motion.circle
           cx={center}
           cy={center}
@@ -194,7 +202,6 @@ function CircularScore({
           filter={`drop-shadow(0 0 8px ${glowColor})`}
         />
       </svg>
-      {/* Center text */}
       <div className="absolute flex flex-col items-center">
         <motion.span
           className="text-4xl font-bold"
@@ -275,6 +282,106 @@ function TypingIndicator() {
   )
 }
 
+// ─── Voice Wave Animation ────────────────────────────────────────────────────
+
+function VoiceWaveVisualizer({ isActive }: { isActive: boolean }) {
+  return (
+    <div className="flex items-center justify-center gap-[3px]">
+      {[...Array(5)].map((_, i) => (
+        <motion.div
+          key={i}
+          className="w-[3px] rounded-full bg-teal-400"
+          animate={
+            isActive
+              ? {
+                  height: [8, 20 + i * 4, 12, 24 - i * 2, 8],
+                }
+              : { height: 8 }
+          }
+          transition={
+            isActive
+              ? {
+                  duration: 0.8 + i * 0.1,
+                  repeat: Infinity,
+                  repeatType: 'reverse',
+                  ease: 'easeInOut',
+                }
+              : { duration: 0.3 }
+          }
+        />
+      ))}
+    </div>
+  )
+}
+
+// ─── AI Speaking Indicator ───────────────────────────────────────────────────
+
+function AiSpeakingIndicator() {
+  return (
+    <div className="flex items-center justify-center gap-1">
+      {[...Array(4)].map((_, i) => (
+        <motion.div
+          key={i}
+          className="size-2 rounded-full bg-teal-400"
+          animate={{
+            scale: [1, 1.5, 1],
+            opacity: [0.5, 1, 0.5],
+          }}
+          transition={{
+            duration: 0.6,
+            repeat: Infinity,
+            delay: i * 0.15,
+            ease: 'easeInOut',
+          }}
+        />
+      ))}
+    </div>
+  )
+}
+
+// ─── Recording Timer ─────────────────────────────────────────────────────────
+
+function RecordingTimer({ startTime }: { startTime: number | null }) {
+  const [elapsed, setElapsed] = useState(0)
+  const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
+
+  // Cleanup on unmount or startTime change
+  useEffect(() => {
+    // Clear previous interval
+    if (intervalRef.current) {
+      clearInterval(intervalRef.current)
+      intervalRef.current = null
+    }
+
+    if (startTime) {
+      intervalRef.current = setInterval(() => {
+        setElapsed(Math.floor((Date.now() - startTime) / 1000))
+      }, 1000)
+    }
+
+    return () => {
+      if (intervalRef.current) {
+        clearInterval(intervalRef.current)
+        intervalRef.current = null
+      }
+    }
+  }, [startTime])
+
+  // Reset when no startTime
+  if (!startTime) {
+    return <span className="font-mono text-sm tabular-nums text-red-400">00:00</span>
+  }
+
+  const minutes = Math.floor(elapsed / 60)
+  const seconds = elapsed % 60
+
+  return (
+    <span className="font-mono text-sm tabular-nums text-red-400">
+      {String(minutes).padStart(2, '0')}:{String(seconds).padStart(2, '0')}
+    </span>
+  )
+}
+
 // ─── Main Component ──────────────────────────────────────────────────────────
 
 export default function InterviewCoach() {
@@ -300,9 +407,57 @@ export default function InterviewCoach() {
   const [isSending, setIsSending] = useState(false)
   const [showReview, setShowReview] = useState(false)
 
+  // Voice state
+  const [inputMode, setInputMode] = useState<InputMode>('voice')
+  const [isRecording, setIsRecording] = useState(false)
+  const [recordingStartTime, setRecordingStartTime] = useState<number | null>(null)
+  const [isAiSpeaking, setIsAiSpeaking] = useState(false)
+  const [isTranscribing, setIsTranscribing] = useState(false)
+  const [micPermission, setMicPermission] = useState<PermissionState | 'unknown'>('unknown')
+  const [showMuted, setShowMuted] = useState(false)
+  const [interviewDuration, setInterviewDuration] = useState(0)
+
   // Refs
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLInputElement>(null)
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null)
+  const audioChunksRef = useRef<Blob[]>([])
+  const audioContextRef = useRef<AudioContext | null>(null)
+  const currentAudioRef = useRef<HTMLAudioElement | null>(null)
+  const interviewTimerRef = useRef<ReturnType<typeof setInterval> | null>(null)
+
+  // ─── Check Mic Permission ────────────────────────────────────────────
+
+  useEffect(() => {
+    async function checkPermission() {
+      try {
+        const result = await navigator.permissions.query({ name: 'microphone' as PermissionName })
+        setMicPermission(result.state)
+        result.onchange = () => setMicPermission(result.state)
+      } catch {
+        setMicPermission('unknown')
+      }
+    }
+    checkPermission()
+  }, [])
+
+  // ─── Interview Timer ─────────────────────────────────────────────────
+
+  useEffect(() => {
+    if (mode === 'interview') {
+      interviewTimerRef.current = setInterval(() => {
+        setInterviewDuration((prev) => prev + 1)
+      }, 1000)
+    } else {
+      if (interviewTimerRef.current) {
+        clearInterval(interviewTimerRef.current)
+        interviewTimerRef.current = null
+      }
+    }
+    return () => {
+      if (interviewTimerRef.current) clearInterval(interviewTimerRef.current)
+    }
+  }, [mode])
 
   // Auto-scroll to bottom
   const scrollToBottom = useCallback(() => {
@@ -313,12 +468,168 @@ export default function InterviewCoach() {
     scrollToBottom()
   }, [messages, aiTyping, scrollToBottom])
 
-  // Focus input when interview starts
+  // Focus input when in text mode
   useEffect(() => {
-    if (mode === 'interview' && !isSending) {
+    if (mode === 'interview' && !isSending && inputMode === 'text') {
       inputRef.current?.focus()
     }
-  }, [mode, isSending])
+  }, [mode, isSending, inputMode])
+
+  // ─── Play TTS Audio ──────────────────────────────────────────────────
+
+  const playTTS = useCallback(async (text: string): Promise<void> => {
+    try {
+      setIsAiSpeaking(true)
+
+      // Stop any currently playing audio
+      if (currentAudioRef.current) {
+        currentAudioRef.current.pause()
+        currentAudioRef.current = null
+      }
+
+      const res = await fetch('/api/ai/tts', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ text, voice: 'kazi', speed: 1.0 }),
+      })
+
+      if (!res.ok) throw new Error('TTS failed')
+
+      const audioBlob = await res.blob()
+      const audioUrl = URL.createObjectURL(audioBlob)
+      const audio = new Audio(audioUrl)
+      currentAudioRef.current = audio
+
+      audio.onended = () => {
+        setIsAiSpeaking(false)
+        URL.revokeObjectURL(audioUrl)
+        currentAudioRef.current = null
+      }
+
+      audio.onerror = () => {
+        setIsAiSpeaking(false)
+        URL.revokeObjectURL(audioUrl)
+        currentAudioRef.current = null
+      }
+
+      await audio.play()
+    } catch (error) {
+      console.error('TTS playback error:', error)
+      setIsAiSpeaking(false)
+    }
+  }, [])
+
+  // ─── Stop TTS Audio ──────────────────────────────────────────────────
+
+  const stopTTS = useCallback(() => {
+    if (currentAudioRef.current) {
+      currentAudioRef.current.pause()
+      currentAudioRef.current = null
+    }
+    setIsAiSpeaking(false)
+  }, [])
+
+  // ─── Replay AI Message Audio ─────────────────────────────────────────
+
+  const handleReplayAudio = useCallback((msg: ChatMessage) => {
+    if (isAiSpeaking) {
+      stopTTS()
+      return
+    }
+    playTTS(msg.content)
+  }, [isAiSpeaking, playTTS, stopTTS])
+
+  // ─── Voice Recording ─────────────────────────────────────────────────
+
+  const startRecording = useCallback(async () => {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({
+        audio: {
+          echoCancellation: true,
+          noiseSuppression: true,
+          sampleRate: 24000,
+        },
+      })
+
+      // Stop TTS if it's playing
+      stopTTS()
+
+      const mediaRecorder = new MediaRecorder(stream, {
+        mimeType: MediaRecorder.isTypeSupported('audio/webm;codecs=opus')
+          ? 'audio/webm;codecs=opus'
+          : MediaRecorder.isTypeSupported('audio/webm')
+            ? 'audio/webm'
+            : 'audio/ogg',
+      })
+
+      audioChunksRef.current = []
+
+      mediaRecorder.ondataavailable = (event) => {
+        if (event.data.size > 0) {
+          audioChunksRef.current.push(event.data)
+        }
+      }
+
+      mediaRecorder.onstop = async () => {
+        // Stop all tracks on the stream
+        stream.getTracks().forEach((track) => track.stop())
+
+        if (audioChunksRef.current.length === 0) return
+
+        const audioBlob = new Blob(audioChunksRef.current, { type: mediaRecorder.mimeType })
+
+        // Convert to base64 and send to ASR
+        const reader = new FileReader()
+        reader.onloadend = async () => {
+          const base64Data = reader.result as string
+          setIsTranscribing(true)
+
+          try {
+            const asrRes = await fetch('/api/ai/asr', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ audioBase64: base64Data }),
+            })
+
+            const asrData = await asrRes.json()
+
+            if (asrData.success && asrData.transcription && !asrData.isEmpty) {
+              setCurrentInput(asrData.transcription)
+              // Auto-send the transcribed answer
+              await sendAnswer(asrData.transcription)
+            } else {
+              // No speech detected
+              setIsTranscribing(false)
+            }
+          } catch (error) {
+            console.error('ASR error:', error)
+            setIsTranscribing(false)
+          }
+        }
+
+        reader.readAsDataURL(audioBlob)
+      }
+
+      mediaRecorderRef.current = mediaRecorder
+      mediaRecorder.start(500) // Collect data every 500ms
+      setIsRecording(true)
+      setRecordingStartTime(Date.now())
+      setMicPermission('granted')
+    } catch (error) {
+      console.error('Microphone access error:', error)
+      setMicPermission('denied')
+      // Fall back to text mode
+      setInputMode('text')
+    }
+  }, [stopTTS])
+
+  const stopRecording = useCallback(() => {
+    if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
+      mediaRecorderRef.current.stop()
+    }
+    setIsRecording(false)
+    setRecordingStartTime(null)
+  }, [])
 
   // ─── Start Interview ─────────────────────────────────────────────────
 
@@ -329,6 +640,7 @@ export default function InterviewCoach() {
     setMessages([])
     setLiveScores({ relevance: 0, clarity: 0, confidence: 0 })
     setCurrentQuestionNum(1)
+    setInterviewDuration(0)
 
     try {
       const res = await fetch('/api/ai/interview', {
@@ -351,6 +663,11 @@ export default function InterviewCoach() {
           timestamp: Date.now(),
         }
         setMessages([welcomeMsg])
+
+        // Auto-speak the first question
+        setTimeout(() => {
+          playTTS(data.question)
+        }, 500)
 
         // Create session in store
         setInterviewSession({
@@ -376,20 +693,25 @@ export default function InterviewCoach() {
         timestamp: Date.now(),
       }
       setMessages([errorMsg])
+      setTimeout(() => playTTS(errorMsg.content), 500)
     } finally {
       setIsLoading(false)
       setAiTyping(false)
     }
   }
 
-  // ─── Send Answer ─────────────────────────────────────────────────────
+  // ─── Send Answer (shared by text & voice) ────────────────────────────
 
-  const handleSendAnswer = async () => {
-    const answer = currentInput.trim()
+  const sendAnswer = async (answerText: string) => {
+    const answer = answerText.trim()
     if (!answer || isSending) return
 
     setIsSending(true)
     setCurrentInput('')
+    setIsTranscribing(false)
+
+    // Stop any TTS playback
+    stopTTS()
 
     // Add user message
     const userMsg: ChatMessage = {
@@ -450,6 +772,9 @@ export default function InterviewCoach() {
           }
           setMessages((prev) => [...prev, closingMsg])
 
+          // Speak closing message
+          setTimeout(() => playTTS(closingMsg.content), 800)
+
           // Calculate final scores
           const finalScores = {
             relevance: Math.round(((liveScores.relevance * currentQuestionNum) + scores.relevance) / (currentQuestionNum + 1) * 10) / 10,
@@ -488,18 +813,22 @@ export default function InterviewCoach() {
             }
           }, 2500)
         } else {
-          // Add next question
+          // Add next question and speak it
           setTimeout(() => {
+            const nextQuestion = data.nextQuestion || 'Can you tell me more about your experience?'
             const nextMsg: ChatMessage = {
               id: `ai-${Date.now()}`,
               role: 'ai',
-              content: data.nextQuestion || 'Can you tell me more about your experience?',
+              content: nextQuestion,
               timestamp: Date.now(),
             }
             setMessages((prev) => [...prev, nextMsg])
             setCurrentQuestionNum((prev) => prev + 1)
             setAiTyping(false)
             setIsSending(false)
+
+            // Auto-speak the next question
+            setTimeout(() => playTTS(nextQuestion), 300)
           }, 800)
           return
         }
@@ -513,9 +842,28 @@ export default function InterviewCoach() {
         timestamp: Date.now(),
       }
       setMessages((prev) => [...prev, errorMsg])
+      setTimeout(() => playTTS(errorMsg.content), 500)
     } finally {
       setAiTyping(false)
       setIsSending(false)
+    }
+  }
+
+  // ─── Send from Text Input ────────────────────────────────────────────
+
+  const handleSendAnswer = () => {
+    const answer = currentInput.trim()
+    if (!answer || isSending) return
+    sendAnswer(answer)
+  }
+
+  // ─── Handle Mic Press (Push-to-Talk) ─────────────────────────────────
+
+  const handleMicPress = () => {
+    if (isRecording) {
+      stopRecording()
+    } else {
+      startRecording()
     }
   }
 
@@ -523,6 +871,8 @@ export default function InterviewCoach() {
 
   const handleSkipQuestion = async () => {
     if (isSending) return
+
+    stopTTS()
 
     const skipMsg: ChatMessage = {
       id: `user-skip-${Date.now()}`,
@@ -574,6 +924,7 @@ export default function InterviewCoach() {
             }
             setMessages((prev) => [...prev, nextMsg])
             setCurrentQuestionNum((prev) => prev + 1)
+            setTimeout(() => playTTS(data.question), 300)
           }, 500)
         }
       } catch {
@@ -590,6 +941,33 @@ export default function InterviewCoach() {
         setIsSending(false)
       }
     }
+  }
+
+  // ─── End Interview Early ─────────────────────────────────────────────
+
+  const handleEndInterview = () => {
+    stopTTS()
+    stopRecording()
+
+    const overallScore = Math.round(
+      ((liveScores.relevance + liveScores.clarity + liveScores.confidence) / 3) * 10
+    ) / 10
+
+    const sessionResults: SessionResults = {
+      overallScore: overallScore || 0,
+      relevance: liveScores.relevance || 0,
+      clarity: liveScores.clarity || 0,
+      confidence: liveScores.confidence || 0,
+      feedbackSummary: liveScores.relevance > 0
+        ? "You ended the interview early. Keep practicing to build your confidence and improve your scores!"
+        : "The interview was ended before any questions were answered. Try again when you're ready!",
+      improvementTips: liveScores.relevance > 0
+        ? generateImprovementTips(liveScores)
+        : ['Practice with a shorter session first', 'Try the 3-question option to build confidence'],
+      closingMessage: 'Interview ended.',
+    }
+    setResults(sessionResults)
+    setMode('results')
   }
 
   // ─── Generate Improvement Tips ───────────────────────────────────────
@@ -630,6 +1008,8 @@ export default function InterviewCoach() {
   // ─── Reset ───────────────────────────────────────────────────────────
 
   const handleReset = () => {
+    stopTTS()
+    stopRecording()
     setMode('setup')
     setMessages([])
     setCurrentInput('')
@@ -638,6 +1018,19 @@ export default function InterviewCoach() {
     setResults(null)
     setShowReview(false)
     setInterviewSession(null)
+    setIsRecording(false)
+    setIsAiSpeaking(false)
+    setIsTranscribing(false)
+    setInterviewDuration(0)
+    setRecordingStartTime(null)
+  }
+
+  // ─── Format Duration ─────────────────────────────────────────────────
+
+  const formatDuration = (seconds: number) => {
+    const m = Math.floor(seconds / 60)
+    const s = seconds % 60
+    return `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`
   }
 
   // ─── Character Count Feedback ────────────────────────────────────────
@@ -680,10 +1073,42 @@ export default function InterviewCoach() {
               Interview Coach
             </h1>
             <p className="text-sm text-muted-foreground">
-              Practice with AI-powered mock interviews
+              Voice-powered virtual interview practice
             </p>
           </div>
         </motion.header>
+
+        {/* Voice Interview Feature Card */}
+        <motion.div
+          variants={fadeInUp}
+          className="glass-strong relative overflow-hidden rounded-2xl p-5"
+        >
+          <div className="pointer-events-none absolute -right-8 -top-8 size-32 rounded-full bg-teal-400/10 blur-3xl" />
+          <div className="pointer-events-none absolute -bottom-4 -left-4 size-20 rounded-full bg-cyan-400/10 blur-2xl" />
+          <div className="relative flex items-start gap-4">
+            <div className="flex size-12 shrink-0 items-center justify-center rounded-2xl bg-teal-400/15">
+              <Headphones className="size-6 text-teal-400" />
+            </div>
+            <div className="flex-1">
+              <h2 className="text-base font-bold text-foreground">Virtual Voice Interview</h2>
+              <p className="mt-1 text-sm leading-relaxed text-foreground/75">
+                Have a real verbal conversation with your AI interviewer. Speak your answers
+                out loud and get real-time feedback — just like a real interview!
+              </p>
+              <div className="mt-3 flex flex-wrap gap-2">
+                <Badge className="border-0 bg-teal-400/15 text-teal-400 text-[10px]">
+                  <Mic className="mr-1 size-3" /> Voice Input
+                </Badge>
+                <Badge className="border-0 bg-cyan-400/15 text-cyan-400 text-[10px]">
+                  <Volume2 className="mr-1 size-3" /> AI Speaks
+                </Badge>
+                <Badge className="border-0 bg-purple-400/15 text-purple-400 text-[10px]">
+                  <Keyboard className="mr-1 size-3" /> Type Option
+                </Badge>
+              </div>
+            </div>
+          </div>
+        </motion.div>
 
         {/* Industry Selector */}
         <motion.section variants={fadeInUp}>
@@ -756,8 +1181,8 @@ export default function InterviewCoach() {
             whileHover={{ scale: 1.01 }}
             whileTap={{ scale: 0.98 }}
           >
-            <Mic className="size-5" />
-            Start Interview
+            <Phone className="size-5" />
+            Start Voice Interview
           </motion.button>
         </motion.section>
 
@@ -785,8 +1210,7 @@ export default function InterviewCoach() {
                         {session.industry} Interview
                       </p>
                       <p className="text-xs text-muted-foreground">
-                        {session.totalQuestions} questions •{' '}
-                        {new Date(session.messages[0]?.timestamp ?? Date.now()).toLocaleDateString()}
+                        {session.totalQuestions} questions
                       </p>
                     </div>
                   </div>
@@ -817,8 +1241,8 @@ export default function InterviewCoach() {
                 Pro Tip
               </p>
               <p className="mt-1 text-sm leading-relaxed text-foreground/85">
-                Practice makes progress! Even a 5-question session can boost your confidence
-                and sharpen your answers for real interviews.
+                The AI interviewer will speak questions aloud. Answer with your voice for
+                the most realistic practice, or type if you prefer. Headphones recommended!
               </p>
             </div>
           </div>
@@ -976,7 +1400,7 @@ export default function InterviewCoach() {
           <div>
             <h1 className="text-2xl font-bold text-foreground">Interview Results</h1>
             <p className="text-sm text-muted-foreground">
-              {selectedIndustry} • {questionCount} questions
+              {selectedIndustry} • {questionCount} questions • {formatDuration(interviewDuration)}
             </p>
           </div>
         </motion.header>
@@ -1126,7 +1550,9 @@ export default function InterviewCoach() {
     )
   }
 
-  // ─── Interview Mode ──────────────────────────────────────────────────
+  // ═══════════════════════════════════════════════════════════════════════
+  // INTERVIEW MODE — Virtual Interview UI
+  // ═══════════════════════════════════════════════════════════════════════
 
   return (
     <motion.div
@@ -1134,34 +1560,56 @@ export default function InterviewCoach() {
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
     >
-      {/* Top Bar: Score Indicators */}
+      {/* ─── Top Bar: Virtual Interview Header ─────────────────────────── */}
       <div className="sticky top-0 z-10 border-b border-border/30 bg-background/90 px-4 pb-3 pt-4 backdrop-blur-md">
-        {/* Question Counter */}
         <div className="mb-3 flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <div className="flex size-8 items-center justify-center rounded-lg bg-teal-400/15">
-              <Mic className="size-4 text-teal-400" />
+          <div className="flex items-center gap-3">
+            <div className="relative flex size-10 items-center justify-center rounded-2xl bg-teal-400/15">
+              <Headphones className="size-5 text-teal-400" />
+              {isAiSpeaking && (
+                <motion.div
+                  className="absolute -right-0.5 -top-0.5 size-3 rounded-full bg-teal-400"
+                  animate={{ scale: [1, 1.3, 1], opacity: [1, 0.7, 1] }}
+                  transition={{ duration: 0.8, repeat: Infinity }}
+                />
+              )}
             </div>
             <div>
               <p className="text-sm font-semibold text-foreground">
                 {selectedIndustry} Interview
               </p>
-              <p className="text-xs text-muted-foreground">
-                Question {currentQuestionNum}/{questionCount}
-              </p>
+              <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                <span>Q{currentQuestionNum}/{questionCount}</span>
+                <span className="text-border">•</span>
+                <span className="flex items-center gap-1">
+                  <Clock className="size-3" />
+                  {formatDuration(interviewDuration)}
+                </span>
+              </div>
             </div>
           </div>
-          <Badge className="border-0 bg-teal-400/15 text-teal-400">
-            <Target className="mr-1 size-3" />
-            {Math.round(((liveScores.relevance + liveScores.clarity + liveScores.confidence) / 3) * 10) / 10} avg
-          </Badge>
+          <div className="flex items-center gap-2">
+            <Badge className="border-0 bg-teal-400/15 text-teal-400">
+              <Target className="mr-1 size-3" />
+              {Math.round(((liveScores.relevance + liveScores.clarity + liveScores.confidence) / 3) * 10) / 10} avg
+            </Badge>
+            {/* End Call Button */}
+            <motion.button
+              onClick={handleEndInterview}
+              className="flex size-9 items-center justify-center rounded-xl bg-red-500/15 text-red-400 transition-colors hover:bg-red-500/25"
+              whileTap={{ scale: 0.9 }}
+              aria-label="End interview"
+            >
+              <PhoneOff className="size-4" />
+            </motion.button>
+          </div>
         </div>
 
         {/* Live Score Bars */}
-        <div className="flex flex-col gap-2">
+        <div className="flex flex-col gap-1.5">
           <div className="flex items-center gap-3">
             <span className="w-20 text-[11px] font-medium text-muted-foreground">Relevance</span>
-            <div className="h-2 flex-1 overflow-hidden rounded-full bg-secondary">
+            <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-secondary">
               <motion.div
                 className={`h-full rounded-full ${getScoreBgColor(liveScores.relevance)}`}
                 animate={{ width: `${liveScores.relevance * 10}%` }}
@@ -1174,7 +1622,7 @@ export default function InterviewCoach() {
           </div>
           <div className="flex items-center gap-3">
             <span className="w-20 text-[11px] font-medium text-muted-foreground">Clarity</span>
-            <div className="h-2 flex-1 overflow-hidden rounded-full bg-secondary">
+            <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-secondary">
               <motion.div
                 className={`h-full rounded-full ${getScoreBgColor(liveScores.clarity)}`}
                 animate={{ width: `${liveScores.clarity * 10}%` }}
@@ -1187,7 +1635,7 @@ export default function InterviewCoach() {
           </div>
           <div className="flex items-center gap-3">
             <span className="w-20 text-[11px] font-medium text-muted-foreground">Confidence</span>
-            <div className="h-2 flex-1 overflow-hidden rounded-full bg-secondary">
+            <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-secondary">
               <motion.div
                 className={`h-full rounded-full ${getScoreBgColor(liveScores.confidence)}`}
                 animate={{ width: `${liveScores.confidence * 10}%` }}
@@ -1204,13 +1652,64 @@ export default function InterviewCoach() {
         <div className="mt-3">
           <Progress
             value={(currentQuestionNum / questionCount) * 100}
-            className="h-1.5 bg-secondary"
+            className="h-1 bg-secondary"
           />
         </div>
       </div>
 
-      {/* Chat Messages */}
-      <div className="flex-1 overflow-y-auto px-4 py-4" style={{ maxHeight: 'calc(100vh - 280px)' }}>
+      {/* ─── AI Speaking Overlay ────────────────────────────────────────── */}
+      <AnimatePresence>
+        {isAiSpeaking && (
+          <motion.div
+            className="glass-strong flex items-center justify-center gap-3 px-4 py-3"
+            initial={{ opacity: 0, height: 0 }}
+            animate={{ opacity: 1, height: 'auto' }}
+            exit={{ opacity: 0, height: 0 }}
+            transition={{ duration: 0.3 }}
+          >
+            <div className="flex size-8 items-center justify-center rounded-full bg-teal-400/20">
+              <Volume2 className="size-4 text-teal-400" />
+            </div>
+            <div className="flex flex-col">
+              <span className="text-xs font-semibold text-teal-400">Interviewer is speaking...</span>
+              <AiSpeakingIndicator />
+            </div>
+            <motion.button
+              onClick={stopTTS}
+              className="ml-auto flex size-8 items-center justify-center rounded-lg bg-secondary/60 text-muted-foreground transition-colors hover:text-foreground"
+              whileTap={{ scale: 0.9 }}
+              aria-label="Stop speaking"
+            >
+              <VolumeX className="size-4" />
+            </motion.button>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* ─── Transcribing Overlay ───────────────────────────────────────── */}
+      <AnimatePresence>
+        {isTranscribing && (
+          <motion.div
+            className="flex items-center justify-center gap-3 bg-purple-400/5 px-4 py-3"
+            initial={{ opacity: 0, height: 0 }}
+            animate={{ opacity: 1, height: 'auto' }}
+            exit={{ opacity: 0, height: 0 }}
+            transition={{ duration: 0.3 }}
+          >
+            <motion.div
+              className="flex size-8 items-center justify-center rounded-full bg-purple-400/20"
+              animate={{ rotate: 360 }}
+              transition={{ duration: 2, repeat: Infinity, ease: 'linear' }}
+            >
+              <Mic className="size-4 text-purple-400" />
+            </motion.div>
+            <span className="text-xs font-semibold text-purple-400">Transcribing your answer...</span>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* ─── Chat Messages ──────────────────────────────────────────────── */}
+      <div className="flex-1 overflow-y-auto px-4 py-4" style={{ maxHeight: 'calc(100vh - 320px)' }}>
         <div className="flex flex-col gap-3">
           <AnimatePresence mode="popLayout">
             {messages.map((msg) => {
@@ -1225,12 +1724,30 @@ export default function InterviewCoach() {
                     className="flex items-start gap-2"
                   >
                     <div className="flex size-8 shrink-0 items-center justify-center rounded-full bg-teal-400/15">
-                      <Mic className="size-4 text-teal-400" />
+                      <Headphones className="size-4 text-teal-400" />
                     </div>
                     <div className="max-w-[80%] rounded-2xl rounded-tl-sm border-l-2 border-teal-400 bg-secondary/60 px-4 py-3">
                       <p className="text-sm leading-relaxed text-foreground/90">
                         {msg.content}
                       </p>
+                      {/* Replay button */}
+                      <button
+                        onClick={() => handleReplayAudio(msg)}
+                        className="mt-2 flex items-center gap-1.5 text-[11px] text-teal-400/70 transition-colors hover:text-teal-400"
+                        aria-label={isAiSpeaking ? 'Stop audio' : 'Replay audio'}
+                      >
+                        {isAiSpeaking ? (
+                          <>
+                            <VolumeX className="size-3" />
+                            Stop
+                          </>
+                        ) : (
+                          <>
+                            <Volume2 className="size-3" />
+                            Replay
+                          </>
+                        )}
+                      </button>
                     </div>
                   </motion.div>
                 )
@@ -1255,7 +1772,7 @@ export default function InterviewCoach() {
                 )
               }
 
-              // Feedback message (centered, different style)
+              // Feedback message (centered)
               if (msg.role === 'feedback') {
                 return (
                   <motion.div
@@ -1301,12 +1818,179 @@ export default function InterviewCoach() {
         </div>
       </div>
 
-      {/* Input Area */}
+      {/* ─── Bottom Control Area ────────────────────────────────────────── */}
       <div className="sticky bottom-0 border-t border-border/30 bg-background/95 px-4 pb-20 pt-3 backdrop-blur-md">
-        {/* Character counter */}
-        {charCount > 0 && (
+
+        {/* Mode Toggle */}
+        <div className="mb-3 flex items-center justify-between">
+          <div className="flex items-center gap-1 rounded-xl bg-secondary/60 p-1">
+            <button
+              onClick={() => setInputMode('voice')}
+              className={`flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium transition-all ${
+                inputMode === 'voice'
+                  ? 'bg-teal-400/20 text-teal-400'
+                  : 'text-muted-foreground hover:text-foreground'
+              }`}
+            >
+              <Mic className="size-3" />
+              Voice
+            </button>
+            <button
+              onClick={() => { setInputMode('text'); stopRecording(); }}
+              className={`flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium transition-all ${
+                inputMode === 'text'
+                  ? 'bg-teal-400/20 text-teal-400'
+                  : 'text-muted-foreground hover:text-foreground'
+              }`}
+            >
+              <Keyboard className="size-3" />
+              Type
+            </button>
+          </div>
+
+          {isRecording && (
+            <div className="flex items-center gap-2">
+              <span className="recording-dot size-2 rounded-full bg-red-400" />
+              <RecordingTimer startTime={recordingStartTime} />
+            </div>
+          )}
+        </div>
+
+        {/* Voice Mode Controls */}
+        {inputMode === 'voice' ? (
+          <div className="flex items-center justify-center gap-4">
+            {/* Skip Button */}
+            <motion.button
+              onClick={handleSkipQuestion}
+              disabled={isSending || aiTyping || isTranscribing}
+              className="flex size-12 items-center justify-center rounded-xl bg-secondary/60 text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground disabled:opacity-30"
+              whileTap={{ scale: 0.9 }}
+              aria-label="Skip this question"
+            >
+              <SkipForward className="size-5" />
+            </motion.button>
+
+            {/* Main Mic Button */}
+            <motion.button
+              onClick={handleMicPress}
+              disabled={isSending || aiTyping || isTranscribing || isAiSpeaking}
+              className={`relative flex size-20 items-center justify-center rounded-full transition-all ${
+                isRecording
+                  ? 'bg-red-500 text-white shadow-lg shadow-red-500/30'
+                  : isTranscribing
+                    ? 'bg-purple-500/80 text-white'
+                    : 'bg-teal-500 text-white shadow-lg shadow-teal-500/20 hover:bg-teal-400'
+              } disabled:opacity-30 disabled:shadow-none`}
+              whileTap={{ scale: 0.92 }}
+              aria-label={isRecording ? 'Stop recording' : 'Start recording'}
+            >
+              {/* Recording pulse rings */}
+              {isRecording && (
+                <>
+                  <motion.div
+                    className="absolute inset-0 rounded-full border-2 border-red-400/40"
+                    animate={{ scale: [1, 1.5, 1], opacity: [0.5, 0, 0.5] }}
+                    transition={{ duration: 1.5, repeat: Infinity }}
+                  />
+                  <motion.div
+                    className="absolute inset-0 rounded-full border-2 border-red-400/20"
+                    animate={{ scale: [1, 2, 1], opacity: [0.3, 0, 0.3] }}
+                    transition={{ duration: 1.5, repeat: Infinity, delay: 0.3 }}
+                  />
+                </>
+              )}
+
+              {/* Transcribing spinner */}
+              {isTranscribing ? (
+                <motion.div
+                  animate={{ rotate: 360 }}
+                  transition={{ duration: 1, repeat: Infinity, ease: 'linear' }}
+                >
+                  <Mic className="size-8" />
+                </motion.div>
+              ) : isRecording ? (
+                <div className="flex flex-col items-center gap-1">
+                  <MicOff className="size-7" />
+                  <VoiceWaveVisualizer isActive={isRecording} />
+                </div>
+              ) : (
+                <Mic className="size-8" />
+              )}
+            </motion.button>
+
+            {/* Mute/Speaker Toggle */}
+            <motion.button
+              onClick={() => setShowMuted(!showMuted)}
+              className={`flex size-12 items-center justify-center rounded-xl transition-colors ${
+                showMuted
+                  ? 'bg-red-500/15 text-red-400'
+                  : 'bg-secondary/60 text-muted-foreground hover:bg-secondary hover:text-foreground'
+              }`}
+              whileTap={{ scale: 0.9 }}
+              aria-label={showMuted ? 'Unmute AI speaker' : 'Mute AI speaker'}
+            >
+              {showMuted ? <VolumeX className="size-5" /> : <Volume2 className="size-5" />}
+            </motion.button>
+          </div>
+        ) : (
+          /* Text Mode Controls */
+          <div className="flex items-center gap-2">
+            <div className="relative flex-1">
+              <Input
+                ref={inputRef}
+                value={currentInput}
+                onChange={(e) => setCurrentInput(e.target.value)}
+                onKeyDown={handleKeyDown}
+                placeholder="Type your answer..."
+                disabled={isSending || aiTyping}
+                className="rounded-xl border-border bg-secondary py-3 pr-4 pl-4 text-sm placeholder:text-muted-foreground/50 focus:border-primary"
+                aria-label="Type your interview answer"
+              />
+            </div>
+
+            <motion.div whileTap={{ scale: 0.9 }}>
+              <Button
+                onClick={handleSendAnswer}
+                disabled={!currentInput.trim() || isSending || aiTyping}
+                size="icon"
+                className="size-12 rounded-xl bg-teal-500 text-white hover:bg-teal-400 disabled:opacity-40"
+                aria-label="Send answer"
+              >
+                <Send className="size-5" />
+              </Button>
+            </motion.div>
+
+            <motion.div whileTap={{ scale: 0.9 }}>
+              <Button
+                onClick={handleSkipQuestion}
+                disabled={isSending || aiTyping}
+                variant="ghost"
+                size="icon"
+                className="size-12 rounded-xl text-muted-foreground hover:bg-secondary hover:text-foreground"
+                aria-label="Skip this question"
+              >
+                <SkipForward className="size-5" />
+              </Button>
+            </motion.div>
+          </div>
+        )}
+
+        {/* Voice Mode Hint */}
+        {inputMode === 'voice' && !isRecording && !isTranscribing && !isAiSpeaking && (
           <motion.p
-            className={`mb-2 text-[11px] ${
+            className="mt-2 text-center text-[11px] text-muted-foreground"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            transition={{ delay: 0.5 }}
+          >
+            Tap the microphone to speak your answer
+          </motion.p>
+        )}
+
+        {/* Character counter for text mode */}
+        {inputMode === 'text' && charCount > 0 && (
+          <motion.p
+            className={`mt-2 text-[11px] ${
               charCount < 200
                 ? 'text-muted-foreground'
                 : charCount <= 500
@@ -1319,49 +2003,6 @@ export default function InterviewCoach() {
             {charFeedback}
           </motion.p>
         )}
-
-        <div className="flex items-center gap-2">
-          {/* Text Input */}
-          <div className="relative flex-1">
-            <Input
-              ref={inputRef}
-              value={currentInput}
-              onChange={(e) => setCurrentInput(e.target.value)}
-              onKeyDown={handleKeyDown}
-              placeholder="Type your answer..."
-              disabled={isSending || aiTyping}
-              className="rounded-xl border-border bg-secondary py-3 pr-4 pl-4 text-sm placeholder:text-muted-foreground/50 focus:border-primary"
-              aria-label="Type your interview answer"
-            />
-          </div>
-
-          {/* Send Button */}
-          <motion.div whileTap={{ scale: 0.9 }}>
-            <Button
-              onClick={handleSendAnswer}
-              disabled={!currentInput.trim() || isSending || aiTyping}
-              size="icon"
-              className="size-12 rounded-xl bg-teal-500 text-white hover:bg-teal-400 disabled:opacity-40"
-              aria-label="Send answer"
-            >
-              <Send className="size-5" />
-            </Button>
-          </motion.div>
-
-          {/* Skip Button */}
-          <motion.div whileTap={{ scale: 0.9 }}>
-            <Button
-              onClick={handleSkipQuestion}
-              disabled={isSending || aiTyping}
-              variant="ghost"
-              size="icon"
-              className="size-12 rounded-xl text-muted-foreground hover:bg-secondary hover:text-foreground"
-              aria-label="Skip this question"
-            >
-              <SkipForward className="size-5" />
-            </Button>
-          </motion.div>
-        </div>
       </div>
     </motion.div>
   )

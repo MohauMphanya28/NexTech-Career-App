@@ -218,3 +218,21 @@
   transform: translateY(0);
   transition: opacity 300ms ease-out, transform 300ms ease-out;
 }
+
+/* Recording dot animation */
+@keyframes recording-pulse {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.4; transform: scale(0.8); }
+}
+
+.recording-dot {
+  animation: recording-pulse 1.2s ease-in-out infinite;
+}
+
+/* Voice wave bars animation */
+@keyframes voice-wave {
+  0%, 100% { height: 6px; }
+  25% { height: 16px; }
+  50% { height: 10px; }
+  75% { height: 20px; }
+}
