@@ -5,6 +5,7 @@ import OnboardingFlow from '@/components/career/OnboardingFlow'
 import Dashboard from '@/components/career/Dashboard'
 import Navbar from '@/components/career/Navbar'
 import ResumeBuilder from '@/components/career/ResumeBuilder'
+import ResumeAnalyzer from '@/components/career/ResumeAnalyzer'
 import CoverLetterGenerator from '@/components/career/CoverLetterGenerator'
 import InterviewCoach from '@/components/career/InterviewCoach'
 import ProgressTracker from '@/components/career/ProgressTracker'
@@ -129,6 +130,7 @@ export default function Home() {
     <div className="min-h-screen bg-background pb-20">
       {currentView === 'dashboard' && <Dashboard />}
       {currentView === 'resume' && <ResumeBuilder />}
+      {currentView === 'resume-analyzer' && <ResumeAnalyzer />}
       {currentView === 'cover-letter' && <CoverLetterGenerator />}
       {currentView === 'interview' && <InterviewCoach />}
       {currentView === 'progress' && <ProgressTracker />}

@@ -12,6 +12,7 @@ import {
   Target,
   Award,
   Zap,
+  Search,
 } from 'lucide-react'
 import { useAppStore, type AppView } from '@/lib/store'
 import { Button } from '@/components/ui/button'
@@ -46,6 +47,14 @@ const quickActions: QuickAction[] = [
     accent: 'text-teal-400',
     iconBg: 'bg-teal-400/15',
     view: 'resume',
+  },
+  {
+    title: 'Analyse Resume',
+    description: 'Upload & get expert AI feedback',
+    icon: Search,
+    accent: 'text-rose-400',
+    iconBg: 'bg-rose-400/15',
+    view: 'resume-analyzer',
   },
   {
     title: 'Write Letter',
@@ -169,6 +178,7 @@ export default function Dashboard() {
                   glass group flex flex-col items-start gap-3 rounded-2xl p-4 text-left
                   transition-all duration-200 hover:scale-[1.02] active:scale-[0.98]
                   focus-visible:ring-2 focus-visible:ring-teal-400/50 focus-visible:outline-none
+                  ${i === quickActions.length - 1 && quickActions.length % 2 !== 0 ? 'col-span-2' : ''}
                 `}
                 aria-label={action.title}
               >

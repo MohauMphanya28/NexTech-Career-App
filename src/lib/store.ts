@@ -1,6 +1,6 @@
 import { create } from 'zustand'
 
-export type AppView = 'dashboard' | 'onboarding' | 'resume' | 'cover-letter' | 'interview' | 'progress' | 'profile'
+export type AppView = 'dashboard' | 'onboarding' | 'resume' | 'resume-analyzer' | 'cover-letter' | 'interview' | 'progress' | 'profile'
 
 interface UserProfile {
   id: string
@@ -63,6 +63,39 @@ interface InterviewSession {
   totalQuestions: number
 }
 
+interface ResumeAnalysis {
+  overallScore: number
+  atsCompatibility: {
+    score: number
+    issues: string[]
+    tips: string[]
+  }
+  contentAnalysis: {
+    summary: { score: number; feedback: string; hasSummary: boolean }
+    experience: { score: number; feedback: string; issues: string[]; strengths: string[] }
+    education: { score: number; feedback: string; issues: string[]; strengths: string[] }
+    skills: { score: number; feedback: string; missing: string[]; irrelevant: string[] }
+  }
+  strengths: string[]
+  weaknesses: string[]
+  improvementPlan: Array<{
+    priority: 'high' | 'medium' | 'low'
+    section: string
+    issue: string
+    suggestion: string
+    example: string
+  }>
+  improvedResume: {
+    personalInfo: { fullName: string; email: string; phone: string; location: string; linkedin: string }
+    summary: string
+    experience: Array<{ title: string; company: string; period: string; description: string }>
+    education: Array<{ degree: string; institution: string; year: string }>
+    skills: string[]
+    atsScore: number
+  } | null
+  keyInsight: string
+}
+
 interface AppState {
   // Navigation
   currentView: AppView
@@ -85,6 +118,12 @@ interface AppState {
   setCurrentResume: (resume: ResumeData | null) => void
   resumeStep: number
   setResumeStep: (step: number) => void
+
+  // Resume Analysis
+  resumeAnalysis: ResumeAnalysis | null
+  setResumeAnalysis: (analysis: ResumeAnalysis | null) => void
+  resumeFileName: string
+  setResumeFileName: (name: string) => void
 
   // Cover Letter
   coverLetterContent: string
@@ -133,6 +172,12 @@ export const useAppStore = create<AppState>((set) => ({
   setCurrentResume: (resume) => set({ currentResume: resume }),
   resumeStep: 0,
   setResumeStep: (step) => set({ resumeStep: step }),
+
+  // Resume Analysis
+  resumeAnalysis: null,
+  setResumeAnalysis: (analysis) => set({ resumeAnalysis: analysis }),
+  resumeFileName: '',
+  setResumeFileName: (name) => set({ resumeFileName: name }),
 
   // Cover Letter
   coverLetterContent: '',
