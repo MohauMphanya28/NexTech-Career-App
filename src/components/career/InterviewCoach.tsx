@@ -618,6 +618,52 @@ function RecordingTimer({ startTime }: { startTime: number | null }) {
   )
 }
 
+// ─── Interview Save Helper ──────────────────────────────────────────────────
+
+function saveInterviewToDb(params: {
+  userId?: string
+  industry: string
+  interviewType: string
+  questions: string[]
+  answers: string[]
+  feedback: string[]
+  overallScore: number
+  confidence: number
+  clarity: number
+  relevance: number
+}) {
+  fetch('/api/career-documents', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      docType: 'interview',
+      userId: params.userId || undefined,
+      title: `${params.industry} Interview`,
+      interviewType: params.interviewType,
+      industry: params.industry,
+      questions: params.questions,
+      answers: params.answers,
+      feedback: params.feedback,
+      overallScore: params.overallScore,
+      confidence: params.confidence,
+      clarity: params.clarity,
+      relevance: params.relevance,
+      completed: true,
+      name: 'User',
+    }),
+  }).then(r => r.json()).then(d => {
+    if (d.success && d.userId) {
+      const storeState = useAppStore.getState()
+      if (!storeState.dbUserId) storeState.setDbUserId(d.userId)
+    }
+    // Refresh document list
+    const storeState = useAppStore.getState()
+    fetch('/api/career-documents').then(r => r.json()).then(d => {
+      if (d.success) storeState.setSavedDocuments(d.documents)
+    }).catch(() => {})
+  }).catch(() => {})
+}
+
 // ─── Main Component ──────────────────────────────────────────────────────────
 
 export default function InterviewCoach() {
@@ -1479,37 +1525,19 @@ export default function InterviewCoach() {
 
               // Save interview to database for document history (fire-and-forget)
               try {
-                const storeState = useAppStore.getState()
-                const dbUserId = storeState.dbUserId || storeState.user?.id
-                if (dbUserId) {
-                  fetch('/api/career-documents', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                      docType: 'interview',
-                      userId: dbUserId,
-                      title: `${selectedIndustry} Interview`,
-                      interviewType: interviewSession?.type || 'general',
-                      industry: selectedIndustry,
-                      questions: messages.filter((m: ChatMessage) => m.role === 'ai').map((m: ChatMessage) => m.content),
-                      answers: messages.filter((m: ChatMessage) => m.role === 'user').map((m: ChatMessage) => m.content),
-                      feedback: [],
-                      overallScore: completedSession.score,
-                      confidence: completedSession.confidence,
-                      clarity: completedSession.clarity,
-                      relevance: completedSession.relevance,
-                      completed: true,
-                    }),
-                  }).then(() => {
-                    // Refresh document list in background
-                    fetch(`/api/career-documents?userId=${dbUserId}`).then(r => r.json()).then(d => {
-                      if (d.success) storeState.setSavedDocuments(d.documents)
-                    }).catch(() => {})
-                  }).catch(() => {})
-                }
-              } catch {
-                // Non-critical - interview results are saved to store already
-              }
+                saveInterviewToDb({
+                  userId: useAppStore.getState().dbUserId || undefined,
+                  industry: selectedIndustry,
+                  interviewType: interviewSession?.type || 'general',
+                  questions: messages.filter((m: ChatMessage) => m.role === 'ai').map((m: ChatMessage) => m.content),
+                  answers: messages.filter((m: ChatMessage) => m.role === 'user').map((m: ChatMessage) => m.content),
+                  feedback: [],
+                  overallScore: completedSession.score,
+                  confidence: completedSession.confidence,
+                  clarity: completedSession.clarity,
+                  relevance: completedSession.relevance,
+                })
+              } catch { /* non-critical */ }
             })
 
             return currentLiveScores // Don't modify — just read for final calculation
@@ -1627,33 +1655,18 @@ export default function InterviewCoach() {
 
         // Save interview to database for document history
         try {
-          const storeState = useAppStore.getState()
-          const dbUserId = storeState.dbUserId || storeState.user?.id
-          if (dbUserId) {
-            fetch('/api/career-documents', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({
-                docType: 'interview',
-                userId: dbUserId,
-                title: `${selectedIndustry} Interview`,
-                interviewType: 'general',
-                industry: selectedIndustry,
-                questions: messages.filter((m: ChatMessage) => m.role === 'ai').map((m: ChatMessage) => m.content),
-                answers: messages.filter((m: ChatMessage) => m.role === 'user').map((m: ChatMessage) => m.content),
-                feedback: [],
-                overallScore: sessionResults.overallScore,
-                confidence: sessionResults.confidence,
-                clarity: sessionResults.clarity,
-                relevance: sessionResults.relevance,
-                completed: true,
-              }),
-            }).catch(() => {})
-            // Refresh document list in background
-            fetch(`/api/career-documents?userId=${dbUserId}`).then(r => r.json()).then(d => {
-              if (d.success) storeState.setSavedDocuments(d.documents)
-            }).catch(() => {})
-          }
+          saveInterviewToDb({
+            userId: useAppStore.getState().dbUserId || undefined,
+            industry: selectedIndustry,
+            interviewType: 'general',
+            questions: messages.filter((m: ChatMessage) => m.role === 'ai').map((m: ChatMessage) => m.content),
+            answers: messages.filter((m: ChatMessage) => m.role === 'user').map((m: ChatMessage) => m.content),
+            feedback: [],
+            overallScore: sessionResults.overallScore,
+            confidence: sessionResults.confidence,
+            clarity: sessionResults.clarity,
+            relevance: sessionResults.relevance,
+          })
         } catch {
           // Non-critical
         }
@@ -1771,33 +1784,18 @@ export default function InterviewCoach() {
 
       // Save interview to database for document history
       try {
-        const storeState = useAppStore.getState()
-        const dbUserId = storeState.dbUserId || storeState.user?.id
-        if (dbUserId) {
-          fetch('/api/career-documents', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              docType: 'interview',
-              userId: dbUserId,
-              title: `${selectedIndustry} Interview`,
-              interviewType: 'general',
-              industry: selectedIndustry,
-              questions: messages.filter((m: ChatMessage) => m.role === 'ai').map((m: ChatMessage) => m.content),
-              answers: messages.filter((m: ChatMessage) => m.role === 'user').map((m: ChatMessage) => m.content),
-              feedback: [],
-              overallScore: sessionResults.overallScore,
-              confidence: sessionResults.confidence,
-              clarity: sessionResults.clarity,
-              relevance: sessionResults.relevance,
-              completed: liveScores.relevance > 0,
-            }),
-          }).catch(() => {})
-          // Refresh document list in background
-          fetch(`/api/career-documents?userId=${dbUserId}`).then(r => r.json()).then(d => {
-            if (d.success) storeState.setSavedDocuments(d.documents)
-          }).catch(() => {})
-        }
+        saveInterviewToDb({
+          userId: useAppStore.getState().dbUserId || undefined,
+          industry: selectedIndustry,
+          interviewType: 'general',
+          questions: messages.filter((m: ChatMessage) => m.role === 'ai').map((m: ChatMessage) => m.content),
+          answers: messages.filter((m: ChatMessage) => m.role === 'user').map((m: ChatMessage) => m.content),
+          feedback: [],
+          overallScore: sessionResults.overallScore,
+          confidence: sessionResults.confidence,
+          clarity: sessionResults.clarity,
+          relevance: sessionResults.relevance,
+        })
       } catch {
         // Non-critical
       }

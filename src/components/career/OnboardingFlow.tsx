@@ -179,6 +179,7 @@ export default function OnboardingFlow() {
     setUser,
     setCurrentView,
     setOnboardingStep,
+    setDbUserId,
   } = useAppStore()
 
   const [currentStep, setCurrentStep] = useState(0)
@@ -304,7 +305,7 @@ export default function OnboardingFlow() {
         setUser(profileData)
         setOnboardingStep(STEPS.length)
 
-        // Save to API
+        // Save to API and capture real DB user ID
         fetch('/api/user', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -319,7 +320,17 @@ export default function OnboardingFlow() {
             onboardingDone: true,
             onboardingStep: STEPS.length,
           }),
-        }).catch(console.error)
+        })
+          .then(res => res.json())
+          .then(apiData => {
+            if (apiData.success && apiData.user?.id) {
+              // Store the real database user ID for document saving
+              setDbUserId(apiData.user.id)
+              // Also update the user profile with the real DB ID
+              setUser({ ...profileData, id: apiData.user.id })
+            }
+          })
+          .catch(console.error)
 
         setIsComplete(true)
         setIsCompleting(false)

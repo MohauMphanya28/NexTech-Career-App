@@ -1,5 +1,6 @@
 'use client'
 
+import { useEffect } from 'react'
 import { useAppStore } from '@/lib/store'
 import OnboardingFlow from '@/components/career/OnboardingFlow'
 import Dashboard from '@/components/career/Dashboard'
@@ -120,7 +121,46 @@ function ProfileView() {
 }
 
 export default function Home() {
-  const { currentView } = useAppStore()
+  const { currentView, dbUserId, setDbUserId, user, setUser } = useAppStore()
+
+  // On mount, try to resolve the DB user ID if we don't have one
+  // This is needed because Zustand state resets on page refresh
+  useEffect(() => {
+    if (dbUserId) return // Already have it
+    fetch('/api/career-documents')
+      .then(r => r.json())
+      .then(data => {
+        if (data.userId) {
+          setDbUserId(data.userId)
+        }
+        if (data.success && !user) {
+          // Also try to restore the user profile from the DB
+          fetch(`/api/user?id=${data.userId}`)
+            .then(r => r.json())
+            .then(userData => {
+              if (userData.success && userData.user) {
+                setUser({
+                  id: userData.user.id,
+                  name: userData.user.name || '',
+                  email: userData.user.email || '',
+                  phone: userData.user.phone || '',
+                  age: userData.user.age,
+                  location: userData.user.location || '',
+                  education: userData.user.education || '',
+                  field: userData.user.field || '',
+                  experience: userData.user.experience || '',
+                  skills: userData.user.skills ? JSON.parse(userData.user.skills) : [],
+                  careerGoal: userData.user.careerGoal || '',
+                  onboardingDone: userData.user.onboardingDone || false,
+                  onboardingStep: userData.user.onboardingStep || 0,
+                })
+              }
+            })
+            .catch(() => {})
+        }
+      })
+      .catch(() => {})
+  }, [dbUserId, setDbUserId, user, setUser])
 
   // Onboarding flow is full-screen (no navbar)
   if (currentView === 'onboarding') {

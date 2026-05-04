@@ -20,6 +20,7 @@ import {
   AlertTriangle,
   Eye,
   RotateCcw,
+  Lightbulb,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -284,6 +285,23 @@ export default function DocumentHistory() {
 
     if (detailView?.type === 'resume') {
       const doc = detailData
+      const analysisData = doc.analysisData && typeof doc.analysisData === 'object' && Object.keys(doc.analysisData).length > 0
+        ? doc.analysisData as {
+            overallScore?: number
+            atsCompatibility?: { score: number; issues: string[]; tips: string[] }
+            contentAnalysis?: {
+              summary?: { score: number; feedback: string }
+              experience?: { score: number; feedback: string }
+              education?: { score: number; feedback: string }
+              skills?: { score: number; feedback: string }
+            }
+            strengths?: string[]
+            weaknesses?: string[]
+            keyInsight?: string
+            improvedResume?: any
+          }
+        : null
+
       return (
         <motion.div
           initial={{ opacity: 0, x: 20 }}
@@ -303,7 +321,7 @@ export default function DocumentHistory() {
           {/* Title */}
           <div className="flex items-center gap-3">
             <div className={`size-10 rounded-xl flex items-center justify-center ${getDocIconBg('resume', doc.type)}`}>
-              {doc.type === 'analyzed' ? <SearchIcon className="size-5 text-rose-400" /> : <FileText className="size-5 text-teal-400" />}
+              {doc.type === 'analyzed' ? <SearchIcon className="size-5 text-rose-400" /> : doc.type === 'improved' ? <Sparkles className="size-5 text-teal-400" /> : <FileText className="size-5 text-teal-400" />}
             </div>
             <div>
               <h2 className="text-lg font-bold text-foreground">{doc.title}</h2>
@@ -314,8 +332,117 @@ export default function DocumentHistory() {
             </div>
           </div>
 
+          {/* Analysis Overview (for analyzed resumes with analysis data) */}
+          {analysisData && (
+            <>
+              {/* Key Insight */}
+              {analysisData.keyInsight && (
+                <div className="glass-strong rounded-2xl p-4 flex items-start gap-3 border border-teal-400/20">
+                  <div className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-teal-400/15">
+                    <Lightbulb className="size-4 text-teal-400" />
+                  </div>
+                  <div>
+                    <p className="text-[10px] font-semibold uppercase tracking-wider text-teal-400">Key Insight</p>
+                    <p className="text-sm text-foreground/90 mt-0.5 leading-relaxed">{analysisData.keyInsight}</p>
+                  </div>
+                </div>
+              )}
+
+              {/* Score Overview */}
+              <Card className="glass rounded-2xl p-4">
+                <div className="flex items-center justify-around">
+                  {analysisData.overallScore !== undefined && (
+                    <div className="flex flex-col items-center">
+                      <div className="size-16 rounded-full border-4 border-teal-400/30 flex items-center justify-center">
+                        <span className="text-xl font-bold text-teal-400">{analysisData.overallScore}</span>
+                      </div>
+                      <span className="text-[10px] text-muted-foreground mt-1">Overall</span>
+                    </div>
+                  )}
+                  {analysisData.atsCompatibility && (
+                    <div className="flex flex-col items-center">
+                      <div className="size-14 rounded-full border-4 border-cyan-400/30 flex items-center justify-center">
+                        <span className="text-lg font-bold text-cyan-400">{analysisData.atsCompatibility.score}</span>
+                      </div>
+                      <span className="text-[10px] text-muted-foreground mt-1">ATS</span>
+                    </div>
+                  )}
+                </div>
+              </Card>
+
+              {/* Section Scores */}
+              {analysisData.contentAnalysis && (
+                <Card className="glass rounded-2xl p-4 space-y-3">
+                  <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Section Breakdown</h3>
+                  {[
+                    { label: 'Summary', score: analysisData.contentAnalysis.summary?.score },
+                    { label: 'Experience', score: analysisData.contentAnalysis.experience?.score },
+                    { label: 'Education', score: analysisData.contentAnalysis.education?.score },
+                    { label: 'Skills', score: analysisData.contentAnalysis.skills?.score },
+                  ].filter(s => s.score !== undefined).map(s => (
+                    <div key={s.label} className="space-y-1">
+                      <div className="flex items-center justify-between text-sm">
+                        <span className="text-foreground">{s.label}</span>
+                        <span className="font-medium text-foreground">{s.score}/100</span>
+                      </div>
+                      <div className="h-1.5 w-full rounded-full bg-secondary">
+                        <div
+                          className={`h-1.5 rounded-full ${s.score! >= 80 ? 'bg-teal-400' : s.score! >= 60 ? 'bg-amber-400' : 'bg-red-400'}`}
+                          style={{ width: `${s.score}%` }}
+                        />
+                      </div>
+                    </div>
+                  ))}
+                </Card>
+              )}
+
+              {/* Strengths & Weaknesses */}
+              {(analysisData.strengths?.length > 0 || analysisData.weaknesses?.length > 0) && (
+                <div className="grid gap-3">
+                  {analysisData.strengths?.length > 0 && (
+                    <Card className="glass rounded-2xl p-4">
+                      <div className="flex items-center gap-2 mb-2">
+                        <CheckCircle2 className="size-4 text-teal-400" />
+                        <h3 className="text-xs font-semibold uppercase tracking-wider text-teal-400">Strengths</h3>
+                      </div>
+                      <ul className="space-y-1">
+                        {analysisData.strengths.map((s, i) => (
+                          <li key={i} className="text-sm text-foreground/85 flex items-start gap-1.5">
+                            <span className="text-teal-400 mt-1 shrink-0">•</span>{s}
+                          </li>
+                        ))}
+                      </ul>
+                    </Card>
+                  )}
+                  {analysisData.weaknesses?.length > 0 && (
+                    <Card className="glass rounded-2xl p-4">
+                      <div className="flex items-center gap-2 mb-2">
+                        <AlertTriangle className="size-4 text-amber-400" />
+                        <h3 className="text-xs font-semibold uppercase tracking-wider text-amber-400">Areas for Improvement</h3>
+                      </div>
+                      <ul className="space-y-1">
+                        {analysisData.weaknesses.map((w, i) => (
+                          <li key={i} className="text-sm text-foreground/85 flex items-start gap-1.5">
+                            <span className="text-amber-400 mt-1 shrink-0">•</span>{w}
+                          </li>
+                        ))}
+                      </ul>
+                    </Card>
+                  )}
+                </div>
+              )}
+
+              {/* Divider between analysis and resume content */}
+              <div className="flex items-center gap-3 py-1">
+                <div className="flex-1 h-px bg-border" />
+                <span className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Resume Content</span>
+                <div className="flex-1 h-px bg-border" />
+              </div>
+            </>
+          )}
+
           {/* ATS Score */}
-          {doc.atsScore > 0 && (
+          {doc.atsScore > 0 && !analysisData && (
             <Card className="glass rounded-2xl p-4 flex items-center gap-4">
               <div className="size-14 rounded-full border-4 border-teal-400/30 flex items-center justify-center">
                 <span className="text-lg font-bold text-teal-400">{doc.atsScore}</span>
@@ -773,6 +900,12 @@ export default function DocumentHistory() {
                               <span className="flex items-center gap-1">
                                 <Shield className="size-3 text-teal-400" />
                                 ATS: {doc.atsScore}
+                              </span>
+                            )}
+                            {doc.type === 'resume' && doc.hasAnalysis && (
+                              <span className="flex items-center gap-1 text-teal-400">
+                                <Eye className="size-3" />
+                                Analysis
                               </span>
                             )}
                             {doc.type === 'resume' && doc.originalFileName && (

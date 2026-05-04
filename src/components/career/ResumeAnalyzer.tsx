@@ -342,10 +342,21 @@ export default function ResumeAnalyzer() {
       // Save analysis to database for document history
       try {
         const storeState = useAppStore.getState()
-        const userId = storeState.dbUserId || storeState.user?.id
+        // Resolve the real DB user ID — prefer dbUserId, then fetch from API
+        let userId = storeState.dbUserId
+        if (!userId) {
+          try {
+            const userRes = await fetch('/api/career-documents')
+            const userData = await userRes.json()
+            if (userData.userId) {
+              userId = userData.userId
+              storeState.setDbUserId(userData.userId)
+            }
+          } catch { /* fall through */ }
+        }
         if (userId) {
           const improvedResume = data.analysis?.improvedResume
-          await fetch('/api/career-documents', {
+          const saveRes = await fetch('/api/career-documents', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
@@ -364,13 +375,24 @@ export default function ResumeAnalyzer() {
               content: improvedResume || {},
             }),
           })
+          const saveData = await saveRes.json()
+          if (saveData.success) {
+            // Capture the resolved userId from the server (in case it was auto-created)
+            if (saveData.userId && !storeState.dbUserId) {
+              storeState.setDbUserId(saveData.userId)
+            }
+          } else {
+            console.error('Failed to save analysis to DB:', saveData.error)
+          }
           // Refresh document list in background
           fetch(`/api/career-documents?userId=${userId}`).then(r => r.json()).then(d => {
             if (d.success) storeState.setSavedDocuments(d.documents)
           }).catch(() => {})
+        } else {
+          console.warn('No user ID available — analysis not saved to DB')
         }
-      } catch {
-        // Non-critical - analysis is saved to store already
+      } catch (saveErr) {
+        console.error('Failed to save analysis to DB:', saveErr)
       }
     } catch (error) {
       console.error('Resume analysis error:', error)
@@ -390,7 +412,7 @@ export default function ResumeAnalyzer() {
 
   // ── Use Improved Resume ───────────────────────────────────────────────
 
-  const handleUseImprovedResume = useCallback(() => {
+  const handleUseImprovedResume = useCallback(async () => {
     if (!analysis?.improvedResume) return
 
     const improved = analysis.improvedResume
@@ -408,9 +430,57 @@ export default function ResumeAnalyzer() {
 
     useAppStore.getState().setCurrentResume(resumeData)
     useAppStore.getState().setResumeStep(5) // Jump to preview
+
+    // Save the improved resume to database
+    try {
+      const storeState = useAppStore.getState()
+      let userId = storeState.dbUserId
+      if (!userId) {
+        try {
+          const userRes = await fetch('/api/career-documents')
+          const userData = await userRes.json()
+          if (userData.userId) {
+            userId = userData.userId
+            storeState.setDbUserId(userData.userId)
+          }
+        } catch { /* fall through */ }
+      }
+      // Even without a userId, we can try to save — the API will auto-create a user
+      const saveRes = await fetch('/api/career-documents', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          docType: 'resume',
+          userId: userId || undefined,
+          subType: 'improved',
+          title: resumeData.title,
+          personalInfo: resumeData.personalInfo,
+          summary: resumeData.summary,
+          experience: resumeData.experience,
+          education: resumeData.education,
+          skills: resumeData.skills,
+          atsScore: resumeData.atsScore,
+          template: resumeData.template,
+          content: resumeData,
+          originalFileName: resumeFileName || '',
+          name: resumeData.personalInfo?.fullName || 'User',
+        }),
+      })
+      const saveData = await saveRes.json()
+      if (saveData.success && saveData.userId && !storeState.dbUserId) {
+        storeState.setDbUserId(saveData.userId)
+      }
+      // Refresh document list
+      fetch(`/api/career-documents`).then(r => r.json()).then(d => {
+        if (d.success) storeState.setSavedDocuments(d.documents)
+      }).catch(() => {})
+    } catch {
+      // Non-critical — resume is loaded in builder
+    }
+
     setCurrentView('resume')
-    toast.success('Improved resume loaded! Review it in the Resume Builder.')
-  }, [analysis, setCurrentView])
+    toast.success('Improved resume loaded & saved! Review it in the Resume Builder.')
+  }, [analysis, setCurrentView, resumeFileName])
 
   // ── Reset ─────────────────────────────────────────────────────────────
 

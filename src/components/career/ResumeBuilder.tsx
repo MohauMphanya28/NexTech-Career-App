@@ -519,37 +519,55 @@ export default function ResumeBuilder() {
       // Save to database for document history
       try {
         const storeState = useAppStore.getState()
-        const userId = storeState.dbUserId || storeState.user?.id
-        if (userId) {
-          const saveRes = await fetch('/api/career-documents', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              docType: 'resume',
-              userId,
-              subType: 'built',
-              title: resumeData.title,
-              personalInfo: resumeData.personalInfo,
-              summary: resumeData.summary,
-              experience: resumeData.experience,
-              education: resumeData.education,
-              skills: resumeData.skills,
-              template: resumeData.template,
-              atsScore: resumeData.atsScore,
-              content: resumeData,
-            }),
-          })
-          const saveData = await saveRes.json()
-          if (saveData.success && saveData.document?.id && !storeState.dbUserId) {
-            // If this is the first save, we might need to update the userId
-          }
-          // Refresh document list in background
-          fetch(`/api/career-documents?userId=${userId}`).then(r => r.json()).then(d => {
-            if (d.success) storeState.setSavedDocuments(d.documents)
-          }).catch(() => {})
+        // Resolve the real DB user ID — prefer dbUserId, then fetch from API
+        let userId = storeState.dbUserId
+        if (!userId) {
+          try {
+            const userRes = await fetch('/api/career-documents')
+            const userData = await userRes.json()
+            if (userData.userId) {
+              userId = userData.userId
+              storeState.setDbUserId(userData.userId)
+            }
+          } catch { /* fall through */ }
         }
-      } catch {
-        // Non-critical - resume is saved to store already
+        // Determine subType: if currentResume came from analyzer, mark as 'improved'
+        const subType = currentResume?.title?.includes('(Improved)') ? 'improved' : 'built'
+        // Even without a userId, try to save — the API will auto-create a user
+        const saveRes = await fetch('/api/career-documents', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            docType: 'resume',
+            userId: userId || undefined,
+            subType,
+            title: resumeData.title,
+            personalInfo: resumeData.personalInfo,
+            summary: resumeData.summary,
+            experience: resumeData.experience,
+            education: resumeData.education,
+            skills: resumeData.skills,
+            template: resumeData.template,
+            atsScore: resumeData.atsScore,
+            content: resumeData,
+            name: resumeData.personalInfo?.fullName || 'User',
+          }),
+        })
+        const saveData = await saveRes.json()
+        if (saveData.success) {
+          // Capture the resolved userId from the server (in case it was auto-created)
+          if (saveData.userId && !storeState.dbUserId) {
+            storeState.setDbUserId(saveData.userId)
+          }
+        } else {
+          console.error('Failed to save resume to DB:', saveData.error)
+        }
+        // Refresh document list in background
+        fetch('/api/career-documents').then(r => r.json()).then(d => {
+          if (d.success) storeState.setSavedDocuments(d.documents)
+        }).catch(() => {})
+      } catch (saveErr) {
+        console.error('Failed to save resume to DB:', saveErr)
       }
 
       // Update user data on the backend

@@ -29,3 +29,30 @@ Stage Summary:
 - Interview coach already sends `candidateContext` (job title, company, skills, experience, education, cover letter info) to the API
 - CareerGuide enhanced with context-aware cues for each step of the journey
 - "My Docs" accessible from both the Navbar and Dashboard quick actions
+
+---
+Task ID: 22
+Agent: Main Agent
+Task: Fix analyzed and AI-improved resumes not saving to My Docs
+
+Work Log:
+- Identified root cause: OnboardingFlow created user in DB but never captured the real DB user ID (used fake `user-${Date.now()}` instead). When ResumeAnalyzer/ResumeBuilder tried to save with this fake ID, Prisma foreign key constraint failed silently.
+- Fixed OnboardingFlow: Now captures real DB user ID from `POST /api/user` response and stores it as `dbUserId` in Zustand store
+- Added page.tsx initialization effect: On mount, resolves `dbUserId` from `/api/career-documents` API and restores user profile from DB (handles page refresh which resets Zustand state)
+- Made `/api/career-documents` POST endpoint resilient: Auto-creates a user if none exists, verifies userId exists before saving, falls back to existing user or creates new one. Returns resolved `userId` in response.
+- Fixed ResumeAnalyzer: Uses robust userId resolution (dbUserId → API fallback → auto-create), saves analysis with `subType: 'analyzed'`, captures resolved userId from save response
+- Fixed ResumeAnalyzer "Use Improved Resume" button: Now also saves improved resume to DB with `subType: 'improved'` before navigating to builder
+- Fixed ResumeBuilder: Uses same robust userId resolution, correctly marks resumes from analyzer as `subType: 'improved'` (detected by title containing "(Improved)")
+- Fixed CoverLetterGenerator: Same robust userId resolution pattern, sends without userId to let API auto-create
+- Fixed InterviewCoach: Created `saveInterviewToDb` helper function (avoids `await` in non-async `.finally()` callbacks which caused parse errors), uses fire-and-forget pattern compatible with non-async contexts
+- Enhanced DocumentHistory detail view: Now shows full analysis data for analyzed resumes (overall score, ATS score, section breakdown, strengths, weaknesses, key insight) with a visual divider between analysis and resume content
+- Added "Analysis" indicator badge in document list for resumes with analysis data
+- Added improved resume icon (Sparkles) in detail view for `improved` subType
+
+Stage Summary:
+- Critical bug fixed: All document saves now work correctly by resolving the real DB user ID instead of using a fake client-side ID
+- Analyzed resumes now properly save to My Docs with full analysis data
+- AI-improved resumes now save when user clicks "Use Improved Resume"
+- Document detail view now displays rich analysis data for analyzed resumes
+- Server-side auto-creates users when needed, making the system resilient to missing userIds
+- Page refresh no longer loses the user ID (restored from API on mount)
