@@ -47,13 +47,14 @@ export async function POST(req: NextRequest) {
 
     const zai = await getZAI()
 
+    // Use mp3 format which is more widely supported than wav
     // If text is within limit, single request
     if (trimmedText.length <= 1000) {
       const response = await zai.audio.tts.create({
         input: trimmedText,
         voice: voice as 'kazi',
         speed: Math.max(0.5, Math.min(2.0, speed)),
-        response_format: 'wav',
+        response_format: 'mp3',
         stream: false,
       })
 
@@ -63,7 +64,7 @@ export async function POST(req: NextRequest) {
       return new NextResponse(buffer, {
         status: 200,
         headers: {
-          'Content-Type': 'audio/wav',
+          'Content-Type': 'audio/mpeg',
           'Content-Length': buffer.length.toString(),
           'Cache-Control': 'public, max-age=3600',
         },
@@ -80,7 +81,7 @@ export async function POST(req: NextRequest) {
         input: chunk,
         voice: voice as 'kazi',
         speed: Math.max(0.5, Math.min(2.0, speed)),
-        response_format: 'wav',
+        response_format: 'mp3',
         stream: false,
       })
 

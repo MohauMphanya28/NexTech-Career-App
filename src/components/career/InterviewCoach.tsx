@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useRef, useEffect, useCallback } from 'react'
+import { useState, useRef, useEffect, useCallback, useMemo } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
   Mic,
@@ -80,6 +80,9 @@ const INDUSTRIES = [
 
 const QUESTION_COUNTS = [3, 5, 7, 10]
 
+// Maximum recording duration in seconds (ASR API limit is 30s, we use 25s for safety)
+const MAX_RECORDING_SECONDS = 25
+
 const INDUSTRY_ICONS: Record<string, string> = {
   Technology: '💻',
   Finance: '🏦',
@@ -131,6 +134,78 @@ const scoreRevealVariants = {
     scale: 1,
     transition: { duration: 0.6, ease: [0.25, 0.46, 0.45, 0.94] },
   },
+}
+
+// ─── WAV Encoding Utilities ─────────────────────────────────────────────────
+// Convert browser-recorded audio to WAV format for the ASR API
+// (The ASR API requires WAV or WebM, but format detection from base64 can fail.
+//  Converting to WAV ensures reliable format recognition.)
+
+function writeStringToDataView(view: DataView, offset: number, str: string) {
+  for (let i = 0; i < str.length; i++) {
+    view.setUint8(offset + i, str.charCodeAt(i))
+  }
+}
+
+function encodeAudioBufferToWav(audioBuffer: AudioBuffer): ArrayBuffer {
+  const numChannels = 1 // Mono for ASR
+  const sampleRate = audioBuffer.sampleRate
+  const format = 1 // PCM
+  const bitDepth = 16
+
+  // Get first channel only (mono — sufficient for ASR)
+  const channelData = audioBuffer.getChannelData(0)
+  const dataLength = channelData.length * 2 // 16-bit = 2 bytes per sample
+  const headerLength = 44
+  const totalLength = headerLength + dataLength
+
+  const arrayBuffer = new ArrayBuffer(totalLength)
+  const view = new DataView(arrayBuffer)
+
+  // WAV header
+  writeStringToDataView(view, 0, 'RIFF')
+  view.setUint32(4, totalLength - 8, true)
+  writeStringToDataView(view, 8, 'WAVE')
+  writeStringToDataView(view, 12, 'fmt ')
+  view.setUint32(16, 16, true) // chunk size
+  view.setUint16(20, format, true) // PCM
+  view.setUint16(22, numChannels, true)
+  view.setUint32(24, sampleRate, true)
+  view.setUint32(28, sampleRate * numChannels * 2, true) // byte rate
+  view.setUint16(32, numChannels * 2, true) // block align
+  view.setUint16(34, bitDepth, true)
+  writeStringToDataView(view, 36, 'data')
+  view.setUint32(40, dataLength, true)
+
+  // Write audio samples
+  let offset = 44
+  for (let i = 0; i < channelData.length; i++) {
+    const sample = Math.max(-1, Math.min(1, channelData[i]))
+    view.setInt16(offset, sample < 0 ? sample * 0x8000 : sample * 0x7fff, true)
+    offset += 2
+  }
+
+  return arrayBuffer
+}
+
+async function convertBlobToWavBase64(audioBlob: Blob): Promise<string> {
+  const arrayBuffer = await audioBlob.arrayBuffer()
+  const audioContext = new AudioContext({ sampleRate: 16000 }) // 16kHz is ideal for ASR
+  try {
+    const audioBuffer = await audioContext.decodeAudioData(arrayBuffer)
+    const wavBuffer = encodeAudioBufferToWav(audioBuffer)
+    // Convert ArrayBuffer to base64
+    const bytes = new Uint8Array(wavBuffer)
+    let binary = ''
+    const chunkSize = 8192
+    for (let i = 0; i < bytes.length; i += chunkSize) {
+      const chunk = bytes.subarray(i, Math.min(i + chunkSize, bytes.length))
+      binary += String.fromCharCode.apply(null, Array.from(chunk))
+    }
+    return btoa(binary)
+  } finally {
+    await audioContext.close()
+  }
 }
 
 // ─── Helper: Score Color ─────────────────────────────────────────────────────
@@ -422,9 +497,11 @@ export default function InterviewCoach() {
   const inputRef = useRef<HTMLInputElement>(null)
   const mediaRecorderRef = useRef<MediaRecorder | null>(null)
   const audioChunksRef = useRef<Blob[]>([])
-  const audioContextRef = useRef<AudioContext | null>(null)
   const currentAudioRef = useRef<HTMLAudioElement | null>(null)
   const interviewTimerRef = useRef<ReturnType<typeof setInterval> | null>(null)
+  const recordingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  // Ref for sendAnswer to avoid stale closures in mediaRecorder.onstop
+  const sendAnswerRef = useRef<(text: string) => Promise<void>>(async () => {})
 
   // ─── Check Mic Permission ────────────────────────────────────────────
 
@@ -574,40 +651,72 @@ export default function InterviewCoach() {
         // Stop all tracks on the stream
         stream.getTracks().forEach((track) => track.stop())
 
-        if (audioChunksRef.current.length === 0) return
-
-        const audioBlob = new Blob(audioChunksRef.current, { type: mediaRecorder.mimeType })
-
-        // Convert to base64 and send to ASR
-        const reader = new FileReader()
-        reader.onloadend = async () => {
-          const base64Data = reader.result as string
-          setIsTranscribing(true)
-
-          try {
-            const asrRes = await fetch('/api/ai/asr', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ audioBase64: base64Data }),
-            })
-
-            const asrData = await asrRes.json()
-
-            if (asrData.success && asrData.transcription && !asrData.isEmpty) {
-              setCurrentInput(asrData.transcription)
-              // Auto-send the transcribed answer
-              await sendAnswer(asrData.transcription)
-            } else {
-              // No speech detected
-              setIsTranscribing(false)
-            }
-          } catch (error) {
-            console.error('ASR error:', error)
-            setIsTranscribing(false)
-          }
+        // Clear the auto-stop timer
+        if (recordingTimeoutRef.current) {
+          clearTimeout(recordingTimeoutRef.current)
+          recordingTimeoutRef.current = null
         }
 
-        reader.readAsDataURL(audioBlob)
+        if (audioChunksRef.current.length === 0) {
+          setIsTranscribing(false)
+          return
+        }
+
+        const audioBlob = new Blob(audioChunksRef.current, { type: mediaRecorder.mimeType })
+        setIsTranscribing(true)
+
+        try {
+          // Convert recorded audio to WAV format for reliable ASR format detection
+          const wavBase64 = await convertBlobToWavBase64(audioBlob)
+
+          const asrRes = await fetch('/api/ai/asr', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              audioBase64: wavBase64,
+              audioFormat: 'audio/wav',
+            }),
+          })
+
+          const asrData = await asrRes.json()
+
+          if (asrData.success && asrData.transcription && !asrData.isEmpty) {
+            setCurrentInput(asrData.transcription)
+            // Auto-send the transcribed answer using the ref to avoid stale closure
+            await sendAnswerRef.current(asrData.transcription)
+          } else if (asrData.error) {
+            // ASR returned an error message - show it to the user
+            console.error('ASR error:', asrData.error)
+            const errorMsg: ChatMessage = {
+              id: `system-asr-error-${Date.now()}`,
+              role: 'feedback',
+              content: `Could not transcribe your voice: ${asrData.error}. Please try again or switch to text input.`,
+              timestamp: Date.now(),
+            }
+            setMessages((prev) => [...prev, errorMsg])
+            setIsTranscribing(false)
+          } else {
+            // No speech detected
+            const noSpeechMsg: ChatMessage = {
+              id: `system-no-speech-${Date.now()}`,
+              role: 'feedback',
+              content: 'No speech was detected. Please try recording again — speak clearly into your microphone.',
+              timestamp: Date.now(),
+            }
+            setMessages((prev) => [...prev, noSpeechMsg])
+            setIsTranscribing(false)
+          }
+        } catch (error) {
+          console.error('ASR/Conversion error:', error)
+          const errorMsg: ChatMessage = {
+            id: `system-error-${Date.now()}`,
+            role: 'feedback',
+            content: 'Voice transcription failed. Please try again or switch to text input.',
+            timestamp: Date.now(),
+          }
+          setMessages((prev) => [...prev, errorMsg])
+          setIsTranscribing(false)
+        }
       }
 
       mediaRecorderRef.current = mediaRecorder
@@ -615,6 +724,20 @@ export default function InterviewCoach() {
       setIsRecording(true)
       setRecordingStartTime(Date.now())
       setMicPermission('granted')
+
+      // Auto-stop recording after MAX_RECORDING_SECONDS (ASR API has 30s limit)
+      recordingTimeoutRef.current = setTimeout(() => {
+        if (mediaRecorderRef.current && mediaRecorderRef.current.state === 'recording') {
+          // Directly stop the recorder instead of calling stopRecording() to avoid circular deps
+          if (recordingTimeoutRef.current) {
+            clearTimeout(recordingTimeoutRef.current)
+            recordingTimeoutRef.current = null
+          }
+          mediaRecorderRef.current.stop()
+          setIsRecording(false)
+          setRecordingStartTime(null)
+        }
+      }, MAX_RECORDING_SECONDS * 1000)
     } catch (error) {
       console.error('Microphone access error:', error)
       setMicPermission('denied')
@@ -624,6 +747,10 @@ export default function InterviewCoach() {
   }, [stopTTS])
 
   const stopRecording = useCallback(() => {
+    if (recordingTimeoutRef.current) {
+      clearTimeout(recordingTimeoutRef.current)
+      recordingTimeoutRef.current = null
+    }
     if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
       mediaRecorderRef.current.stop()
     }
@@ -702,9 +829,9 @@ export default function InterviewCoach() {
 
   // ─── Send Answer (shared by text & voice) ────────────────────────────
 
-  const sendAnswer = async (answerText: string) => {
+  const sendAnswer = useCallback(async (answerText: string) => {
     const answer = answerText.trim()
-    if (!answer || isSending) return
+    if (!answer) return
 
     setIsSending(true)
     setCurrentInput('')
@@ -723,14 +850,20 @@ export default function InterviewCoach() {
     setMessages((prev) => [...prev, userMsg])
     setAiTyping(true)
 
+    // Track whether we're in the "next question" path to manage finally block
+    let isWaitingForNextQuestion = false
+
     try {
+      // Use a ref for currentQuestionNum to avoid stale closures
+      const questionNum = currentQuestionNum
+
       const res = await fetch('/api/ai/interview', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           action: 'evaluate',
           industry: selectedIndustry,
-          questionNumber: currentQuestionNum,
+          questionNumber: questionNum,
           answer,
           totalQuestions: questionCount,
         }),
@@ -741,9 +874,10 @@ export default function InterviewCoach() {
       if (data.success) {
         const scores = data.scores || { relevance: 5, clarity: 5, confidence: 5 }
 
-        // Update live scores (running average)
+        // Update live scores (running average) — single source of truth
         setLiveScores((prev) => {
-          const count = currentQuestionNum
+          const count = questionNum
+          if (count <= 0) return { relevance: scores.relevance, clarity: scores.clarity, confidence: scores.confidence }
           return {
             relevance: Math.round(((prev.relevance * (count - 1)) + scores.relevance) / count * 10) / 10,
             clarity: Math.round(((prev.clarity * (count - 1)) + scores.clarity) / count * 10) / 10,
@@ -762,7 +896,7 @@ export default function InterviewCoach() {
         setMessages((prev) => [...prev, feedbackMsg])
 
         // Check if interview is complete
-        if (data.isComplete || currentQuestionNum >= questionCount) {
+        if (data.isComplete || questionNum >= questionCount) {
           // Interview complete - add closing message
           const closingMsg: ChatMessage = {
             id: `ai-closing-${Date.now()}`,
@@ -775,45 +909,45 @@ export default function InterviewCoach() {
           // Speak closing message
           setTimeout(() => playTTS(closingMsg.content), 800)
 
-          // Calculate final scores
-          const finalScores = {
-            relevance: Math.round(((liveScores.relevance * currentQuestionNum) + scores.relevance) / (currentQuestionNum + 1) * 10) / 10,
-            clarity: Math.round(((liveScores.clarity * currentQuestionNum) + scores.clarity) / (currentQuestionNum + 1) * 10) / 10,
-            confidence: Math.round(((liveScores.confidence * currentQuestionNum) + scores.confidence) / (currentQuestionNum + 1) * 10) / 10,
-          }
+          // Calculate final scores from the updated live scores
+          // The live scores have already been updated above, so use functional state
+          setLiveScores((currentLiveScores) => {
+            const overallScore = Math.round(
+              ((currentLiveScores.relevance + currentLiveScores.clarity + currentLiveScores.confidence) / 3) * 10
+            ) / 10
 
-          const overallScore = Math.round(
-            ((finalScores.relevance + finalScores.clarity + finalScores.confidence) / 3) * 10
-          ) / 10
-
-          // Delay showing results for dramatic effect
-          setTimeout(() => {
-            const sessionResults: SessionResults = {
-              overallScore,
-              ...finalScores,
-              feedbackSummary: data.closingMessage || 'You completed the interview with solid effort. Keep practicing to improve your scores!',
-              improvementTips: generateImprovementTips(finalScores),
-              closingMessage: data.closingMessage || '',
-            }
-            setResults(sessionResults)
-            setMode('results')
-
-            // Update store session
-            if (interviewSession) {
-              const completedSession = {
-                ...interviewSession,
-                score: overallScore,
-                relevance: finalScores.relevance,
-                clarity: finalScores.clarity,
-                confidence: finalScores.confidence,
-                completed: true,
+            // Delay showing results for dramatic effect
+            setTimeout(() => {
+              const sessionResults: SessionResults = {
+                overallScore,
+                ...currentLiveScores,
+                feedbackSummary: data.closingMessage || 'You completed the interview with solid effort. Keep practicing to improve your scores!',
+                improvementTips: generateImprovementTips(currentLiveScores),
+                closingMessage: data.closingMessage || '',
               }
-              setInterviewSession(completedSession)
-              setInterviewHistory([...interviewHistory, completedSession])
-            }
-          }, 2500)
+              setResults(sessionResults)
+              setMode('results')
+
+              // Update store session
+              if (interviewSession) {
+                const completedSession = {
+                  ...interviewSession,
+                  score: overallScore,
+                  relevance: currentLiveScores.relevance,
+                  clarity: currentLiveScores.clarity,
+                  confidence: currentLiveScores.confidence,
+                  completed: true,
+                }
+                setInterviewSession(completedSession)
+                setInterviewHistory([...interviewHistory, completedSession])
+              }
+            }, 2500)
+
+            return currentLiveScores // Don't modify — just read for final calculation
+          })
         } else {
           // Add next question and speak it
+          isWaitingForNextQuestion = true
           setTimeout(() => {
             const nextQuestion = data.nextQuestion || 'Can you tell me more about your experience?'
             const nextMsg: ChatMessage = {
@@ -844,16 +978,25 @@ export default function InterviewCoach() {
       setMessages((prev) => [...prev, errorMsg])
       setTimeout(() => playTTS(errorMsg.content), 500)
     } finally {
-      setAiTyping(false)
-      setIsSending(false)
+      // Only clear loading states if we're NOT waiting for the next question timeout
+      // (the timeout callback will handle clearing them)
+      if (!isWaitingForNextQuestion) {
+        setAiTyping(false)
+        setIsSending(false)
+      }
     }
-  }
+  }, [currentQuestionNum, selectedIndustry, questionCount, interviewSession, interviewHistory, playTTS, stopTTS, setInterviewSession, setInterviewHistory, setAiTyping, setIsLoading])
+
+  // Keep the ref updated with the latest sendAnswer to avoid stale closures
+  useEffect(() => {
+    sendAnswerRef.current = sendAnswer
+  }, [sendAnswer])
 
   // ─── Send from Text Input ────────────────────────────────────────────
 
   const handleSendAnswer = () => {
     const answer = currentInput.trim()
-    if (!answer || isSending) return
+    if (!answer) return
     sendAnswer(answer)
   }
 
@@ -1010,6 +1153,10 @@ export default function InterviewCoach() {
   const handleReset = () => {
     stopTTS()
     stopRecording()
+    if (recordingTimeoutRef.current) {
+      clearTimeout(recordingTimeoutRef.current)
+      recordingTimeoutRef.current = null
+    }
     setMode('setup')
     setMessages([])
     setCurrentInput('')
@@ -1852,6 +1999,7 @@ export default function InterviewCoach() {
             <div className="flex items-center gap-2">
               <span className="recording-dot size-2 rounded-full bg-red-400" />
               <RecordingTimer startTime={recordingStartTime} />
+              <span className="text-xs text-muted-foreground">/ 0:{MAX_RECORDING_SECONDS}</span>
             </div>
           )}
         </div>

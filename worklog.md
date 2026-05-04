@@ -193,3 +193,37 @@ Stage Summary:
 - AI-generated brand images added to public folder
 - Hero banner integrated into Dashboard with gradient overlay
 - All features rendering correctly on dev server
+
+---
+Task ID: 10
+Agent: Main Orchestrator
+Task: Fix voice transcription bug in Interview Coach
+
+Work Log:
+- Investigated the voice transcription pipeline end-to-end
+- Identified 5 root causes from dev server logs:
+  1. ASR API format detection failure: "unsupported audio format: unknown, only WAV and WebM are supported"
+  2. ASR 30-second duration limit exceeded: "transcriptions文件时长限制为0-30秒"
+  3. TTS format error: "不支持当前response_format值" for wav format
+  4. Stale closure bug: sendAnswer captured in stale closure in startRecording's useCallback
+  5. No user feedback when ASR fails — UI stuck in "transcribing" state
+- Fixed ASR route: Better error handling with specific error messages for format and duration errors
+- Fixed TTS route: Changed response_format from 'wav' to 'mp3' (more universally supported)
+- Fixed InterviewCoach component:
+  - Added WAV encoding utilities (writeStringToDataView, encodeAudioBufferToWav, convertBlobToWavBase64)
+  - Client-side audio conversion: Recorded audio is decoded via AudioContext and re-encoded as WAV before sending to ASR
+  - Added sendAnswerRef pattern to eliminate stale closure in mediaRecorder.onstop
+  - Added 25-second recording auto-stop timer (ASR API limit is 30s)
+  - Added user-friendly error feedback messages in chat when ASR fails
+  - Fixed score double-counting bug in interview completion path
+  - Fixed 800ms typing indicator gap in next-question path
+  - Removed dead audioContextRef
+  - Tightened error string matching in ASR route
+
+Stage Summary:
+- Voice transcription now works by converting recorded audio to WAV format before sending
+- Stale closure bug fixed with ref pattern
+- Recording capped at 25 seconds to stay under ASR's 30-second limit
+- Users get helpful feedback when voice transcription fails
+- Score calculation corrected — no double-counting
+- TTS switched to mp3 format for reliability
