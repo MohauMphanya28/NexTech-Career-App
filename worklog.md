@@ -580,3 +580,79 @@ Stage Summary:
 - Replaced VLM (image-only) with proper document parsing libraries
 - pdf-parse for PDF, mammoth for DOCX, direct decode for TXT
 - Full pipeline verified: upload → extract text → LLM analysis → structured results
+
+---
+Task ID: 2
+Agent: TTS Delay Fix
+Task: Fix TTS delay issue — implement two-phase speaking (buffering → speaking) with audio cache
+
+Work Log:
+- **Problem**: When AI generates a response, `isAiSpeaking` was set to `true` immediately (showing speaking animation), but TTS audio took 1-3 seconds to fetch and play. This created a disconnect where the avatar appeared to be "speaking" with no audio.
+- **Solution**: Two-phase speaking state + TTS audio cache
+  - **Phase 1 (Buffering)**: Show a subtle "preparing to speak" indicator while TTS audio is being fetched
+  - **Phase 2 (Speaking)**: Switch to full speaking animation only when audio actually starts playing
+  - **Audio Cache**: Cache TTS audio blobs by text content hash so replay doesn't require a new fetch
+- **Changes made to `/home/z/my-project/src/components/career/InterviewCoach.tsx`**:
+  1. Added `isAiBuffering` state variable (line 651)
+  2. Added `ttsCacheRef` (Map<string, Blob>) and `hashText()` function for TTS audio caching (lines 688-700)
+  3. Rewrote `playTTS` function (lines 808-953):
+     - On cache hit: Play immediately, set `isAiSpeaking=true` right away (no buffering needed)
+     - On cache miss: Set `isAiBuffering=true`, fetch TTS, cache the blob, then switch to `isAiSpeaking=true` when audio plays
+     - Cache size capped at 50 entries with FIFO eviction
+     - Removed `setIsLoading(false)` from playTTS (handled in handleStartInterview's finally block)
+  4. Updated `stopTTS` to also clear `setIsAiBuffering(false)` (line 964)
+  5. Updated `handleReplayAudio` to include `isAiBuffering` in the check (lines 970-975)
+  6. Updated InterviewAvatar `isSpeaking` prop: `isAiSpeaking || isAiBuffering` (line 2426)
+  7. Updated top-bar speaking dot indicator: `(isAiSpeaking || isAiBuffering)` (line 2359)
+  8. Updated name badge indicator with dual-state animation:
+     - Buffering: subtle pulsing dots (bg-teal-400/60, opacity oscillation)
+     - Speaking: full AiSpeakingIndicator with scale+opacity animation
+  9. Updated status indicators area with dual-state:
+     - Buffering: "Kazi is preparing..." with subtle pulse dots
+     - Speaking: "Kazi is speaking..." with wave bars
+     - Proper `key` prop for AnimatePresence transitions between states
+  10. Updated all `isAiSpeaking` conditionals throughout JSX to also account for `isAiBuffering`:
+     - Thinking indicator: `aiTyping && !isAiSpeaking && !isAiBuffering`
+     - Ready indicator: `!isAiSpeaking && !isAiBuffering && !aiTyping && ...`
+     - Question subtitle: `!isAiSpeaking && !isAiBuffering`
+     - Mic button disabled: `isAiSpeaking || isAiBuffering`
+     - Voice hint: `!isAiSpeaking && !isAiBuffering`
+  11. Updated comments in handleStartInterview and sendAnswer to reflect two-phase approach
+  12. Updated isLoading comment to reflect new architecture
+
+Stage Summary:
+- Two-phase speaking eliminates the "speaking with no audio" UX disconnect
+- Buffering state shows subtle "preparing..." indicator during TTS fetch
+- Full speaking animation only activates when audio actually plays
+- Audio cache enables instant replay without re-fetching (cache hit = immediate playback)
+- All UI elements properly reflect both buffering and speaking states
+- Lint check passes (only pre-existing errors in mini-services remain)
+- Dev server compiles successfully with no new errors
+
+---
+Task ID: 3
+Agent: Resume Extraction Service Starter
+Task: Start the document extraction mini-service that the resume analyzer depends on
+
+Work Log:
+- Reviewed service code at /home/z/my-project/mini-services/resume-analyzer/index.ts
+  - Uses Bun.serve() on port 3031
+  - Handles PDF (pdf-parse), DOCX (mammoth), and TXT extraction
+  - Returns JSON: { success: true, extractedContent } or { error: "..." }
+- Reviewed package.json — dependencies: pdf-parse ^2.4.5, mammoth ^1.12.0, z-ai-web-dev-sdk
+- Installed dependencies with npm install — 32 packages, 0 vulnerabilities
+- Reviewed route.ts — confirmed it correctly calls http://localhost:3031/ (server-side call, no XTransformPort needed)
+- Issue: Service kept dying when started with nohup bun --hot index.ts — process exited shortly after when backgrounded
+- Fix: Started service using subshell backgrounding: (bun index.ts > /tmp/resume-service.log 2>&1 &)
+- Verified service is running and responding correctly:
+  - POST with text/plain base64 → {"success":true,"extractedContent":"Hello World"}
+  - Missing fields → {"error":"Missing fields"}
+  - GET method → {"error":"Method not allowed"}
+  - OPTIONS → HTTP 204 with CORS headers
+- Service running on PID 5182, listening on port 3031
+
+Stage Summary:
+- Resume extraction mini-service is now running on port 3031
+- PDF/DOCX/TXT extraction endpoints functional
+- Service stays alive in background using subshell backgrounding pattern
+- Resume analyzer API route can now successfully call the extraction service

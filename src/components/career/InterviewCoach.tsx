@@ -244,8 +244,11 @@ const scoreRevealVariants = {
 }
 
 // ─── Fetch with Retry ───────────────────────────────────────────────────────
-// Retries transient network failures (like "Failed to fetch") up to 3 times
-// with exponential backoff before giving up.
+// Retries transient network failures, HTTP 429 (rate limiting), and 5xx server
+// errors up to 3 times with exponential backoff before giving up.
+// For 429 errors, uses longer backoff: 2s, 4s, 8s
+// For 5xx errors, uses standard backoff: 500ms, 1s, 2s
+// Non-retryable HTTP errors (4xx except 429) are returned as-is.
 
 async function fetchWithRetry(
   url: string,
@@ -258,8 +261,19 @@ async function fetchWithRetry(
   for (let attempt = 0; attempt < maxRetries; attempt++) {
     try {
       const res = await fetch(url, options)
-      // If we get a response (even an error status), return it —
-      // retries are only for network-level failures
+
+      // Retry on rate limiting (429) and server errors (5xx)
+      if (res.status === 429 || (res.status >= 500 && res.status <= 599)) {
+        // Use longer backoff for rate limiting: 2s, 4s, 8s
+        // Standard backoff for 5xx: 500ms, 1s, 2s
+        const retryDelay = res.status === 429 ? 2000 * Math.pow(2, attempt) : baseDelay * Math.pow(2, attempt)
+        console.warn(`HTTP ${res.status}, retrying in ${retryDelay}ms (attempt ${attempt + 1}/${maxRetries})`)
+        if (attempt < maxRetries - 1) {
+          await new Promise((resolve) => setTimeout(resolve, retryDelay))
+          continue
+        }
+      }
+
       return res
     } catch (err) {
       lastError = err instanceof Error ? err : new Error(String(err))
@@ -634,6 +648,7 @@ export default function InterviewCoach() {
   const [isRecording, setIsRecording] = useState(false)
   const [recordingStartTime, setRecordingStartTime] = useState<number | null>(null)
   const [isAiSpeaking, setIsAiSpeaking] = useState(false)
+  const [isAiBuffering, setIsAiBuffering] = useState(false)
   const [isTranscribing, setIsTranscribing] = useState(false)
   const [micPermission, setMicPermission] = useState<PermissionState | 'unknown'>('unknown')
   const [isMuted, setIsMuted] = useState(false)
@@ -669,6 +684,22 @@ export default function InterviewCoach() {
   const sendAnswerRef = useRef<(text: string) => Promise<void>>(async () => {})
   // Ref for isMuted to avoid stale closures in playTTS
   const isMutedRef = useRef(false)
+
+  // TTS audio cache: maps text hash → audio Blob for instant replay
+  const ttsCacheRef = useRef<Map<string, Blob>>(new Map())
+
+  // Simple hash function for cache keys
+  function hashText(text: string): string {
+    let hash = 0
+    for (let i = 0; i < text.length; i++) {
+      const char = text.charCodeAt(i)
+      hash = ((hash << 5) - hash) + char
+      hash |= 0 // Convert to 32bit integer
+    }
+    return hash.toString(36)
+  }
+  // Ref for recording cooldown — prevents rapid successive ASR calls
+  const lastRecordingEndTimeRef = useRef<number>(0)
 
   // ─── Toggle Camera ──────────────────────────────────────────────────
 
@@ -779,20 +810,66 @@ export default function InterviewCoach() {
     if (isMutedRef.current) return
 
     try {
-      // Stop any currently playing audio — null the ref BEFORE pause so
-      // the onended/onerror handlers know it was intentionally stopped
+      // Stop any currently playing audio
       if (currentAudioRef.current) {
         const oldAudio = currentAudioRef.current
         currentAudioRef.current = null
         oldAudio.pause()
       }
 
-      // Set speaking state IMMEDIATELY — the user can already see the text response,
-      // so showing the speaking animation right away feels natural and eliminates
-      // the perceived delay. The TTS fetch takes 1-3s, but the visual feedback
-      // is instant.
-      setIsAiSpeaking(true)
-      setIsLoading(false)
+      // Check cache first
+      const cacheKey = hashText(text)
+      const cachedBlob = ttsCacheRef.current.get(cacheKey)
+
+      if (cachedBlob) {
+        // Cache hit — play immediately with no delay
+        const audioUrl = URL.createObjectURL(cachedBlob)
+        const audio = new Audio(audioUrl)
+        audio.playbackRate = 1.0
+        currentAudioRef.current = audio
+
+        // Set speaking state immediately for cached audio (no buffering needed)
+        setIsAiSpeaking(true)
+        setIsAiBuffering(false)
+
+        audio.onended = () => {
+          if (currentAudioRef.current === audio) {
+            setIsAiSpeaking(false)
+            currentAudioRef.current = null
+          }
+          URL.revokeObjectURL(audioUrl)
+        }
+
+        audio.onerror = () => {
+          if (currentAudioRef.current === audio) {
+            console.error('Audio playback error')
+            setIsAiSpeaking(false)
+            currentAudioRef.current = null
+          }
+          URL.revokeObjectURL(audioUrl)
+        }
+
+        if (audioContextRef.current && audioContextRef.current.state === 'suspended') {
+          await audioContextRef.current.resume()
+        }
+
+        try {
+          await audio.play()
+        } catch (playError: unknown) {
+          const err = playError as DOMException
+          if (err.name === 'AbortError') {
+            setIsAiSpeaking(false)
+            return
+          }
+          throw playError
+        }
+        return
+      }
+
+      // Cache miss — need to fetch TTS audio
+      // Show "buffering" state instead of "speaking" state while fetching
+      setIsAiBuffering(true)
+      setIsAiSpeaking(false)
 
       const res = await fetchWithRetry('/api/ai/tts', {
         method: 'POST',
@@ -808,28 +885,36 @@ export default function InterviewCoach() {
       if (!res.ok) {
         const errorData = await res.json().catch(() => ({}))
         console.error('TTS API error:', res.status, errorData)
-        setIsAiSpeaking(false)
-        return // Graceful degradation — interview continues without audio
+        setIsAiBuffering(false)
+        return // Graceful degradation
       }
 
       const audioBlob = await res.blob()
 
-      // Validate the blob is actual audio data
       if (audioBlob.size < 100) {
         console.error('TTS returned empty/too-small audio blob:', audioBlob.size, 'bytes')
-        setIsAiSpeaking(false)
+        setIsAiBuffering(false)
         return
+      }
+
+      // Store in cache for instant replay
+      ttsCacheRef.current.set(cacheKey, audioBlob)
+      // Keep cache size manageable
+      if (ttsCacheRef.current.size > 50) {
+        const firstKey = ttsCacheRef.current.keys().next().value
+        if (firstKey) ttsCacheRef.current.delete(firstKey)
       }
 
       const audioUrl = URL.createObjectURL(audioBlob)
       const audio = new Audio(audioUrl)
-      // Use a natural playback rate — no artificial speed-up since the TTS speed
-      // parameter already controls the pace. Over-acceleration causes robotic sound.
       audio.playbackRate = 1.0
       currentAudioRef.current = audio
 
+      // Switch from buffering to speaking state
+      setIsAiBuffering(false)
+      setIsAiSpeaking(true)
+
       audio.onended = () => {
-        // Only update state if this is still the active audio
         if (currentAudioRef.current === audio) {
           setIsAiSpeaking(false)
           currentAudioRef.current = null
@@ -838,7 +923,6 @@ export default function InterviewCoach() {
       }
 
       audio.onerror = () => {
-        // Only update state if this is still the active audio
         if (currentAudioRef.current === audio) {
           console.error('Audio playback error')
           setIsAiSpeaking(false)
@@ -847,29 +931,23 @@ export default function InterviewCoach() {
         URL.revokeObjectURL(audioUrl)
       }
 
-      // Ensure audio context is active (handles browser autoplay policy)
       if (audioContextRef.current && audioContextRef.current.state === 'suspended') {
         await audioContextRef.current.resume()
       }
 
-      // play() returns a Promise — catch AbortError which occurs when pause()
-      // is called before the play promise resolves (e.g., user stops audio or
-      // a new TTS call interrupts this one). This is expected, not an error.
       try {
         await audio.play()
-        // Audio is now playing — isAiSpeaking was already set true above
       } catch (playError: unknown) {
         const err = playError as DOMException
         if (err.name === 'AbortError') {
-          // Audio was interrupted by pause() — this is normal (e.g., user started recording)
           setIsAiSpeaking(false)
           return
         }
-        // Re-throw unexpected errors
         throw playError
       }
     } catch (error) {
       console.error('TTS playback error:', error)
+      setIsAiBuffering(false)
       setIsAiSpeaking(false)
     }
   }, [selectedInterviewer])
@@ -878,33 +956,31 @@ export default function InterviewCoach() {
 
   const stopTTS = useCallback(() => {
     if (currentAudioRef.current) {
-      // Null the ref BEFORE pause() so the onended/onerror handlers
-      // know the audio was intentionally stopped and skip state updates.
-      // This prevents the "play() interrupted by pause()" AbortError.
       const audio = currentAudioRef.current
       currentAudioRef.current = null
       audio.pause()
     }
     setIsAiSpeaking(false)
+    setIsAiBuffering(false)
   }, [])
 
   // ─── Replay AI Message Audio ─────────────────────────────────────────
 
   const handleReplayAudio = useCallback((msg: ChatMessage) => {
-    if (isAiSpeaking) {
+    if (isAiSpeaking || isAiBuffering) {
       stopTTS()
       return
     }
     playTTS(msg.content)
-  }, [isAiSpeaking, playTTS, stopTTS])
+  }, [isAiSpeaking, isAiBuffering, playTTS, stopTTS])
 
   // Keep isMutedRef in sync with isMuted state
   useEffect(() => {
     isMutedRef.current = isMuted
   }, [isMuted])
 
-  // isLoading is now cleared directly in playTTS when isAiSpeaking is set true,
-  // so no separate useEffect is needed.
+  // isLoading is cleared in handleStartInterview's finally block,
+  // and playTTS now uses a two-phase approach (buffering → speaking) with audio cache.
 
   // ─── Voice Recording ─────────────────────────────────────────────────
 
@@ -920,6 +996,21 @@ export default function InterviewCoach() {
 
       // Stop TTS if it's playing
       stopTTS()
+
+      // Cooldown: prevent rapid successive recording attempts
+      const now = Date.now()
+      const cooldownMs = 1500
+      if (now - lastRecordingEndTimeRef.current < cooldownMs) {
+        // Show a brief feedback message
+        const cooldownMsg: ChatMessage = {
+          id: `system-cooldown-${Date.now()}`,
+          role: 'feedback',
+          content: 'Please wait a moment before recording again...',
+          timestamp: Date.now(),
+        }
+        setMessages((prev) => [...prev, cooldownMsg])
+        return
+      }
 
       const mediaRecorder = new MediaRecorder(stream, {
         mimeType: MediaRecorder.isTypeSupported('audio/webm;codecs=opus')
@@ -940,6 +1031,9 @@ export default function InterviewCoach() {
       mediaRecorder.onstop = async () => {
         // Stop all tracks on the stream
         stream.getTracks().forEach((track) => track.stop())
+
+        // Record the time when recording ended for cooldown enforcement
+        lastRecordingEndTimeRef.current = Date.now()
 
         // Clear the auto-stop timer
         if (recordingTimeoutRef.current) {
@@ -1086,8 +1180,8 @@ export default function InterviewCoach() {
         }
         setMessages([welcomeMsg])
         // Clear "thinking" state immediately — the text is now visible.
-        // Audio will follow shortly via playTTS, and isAiSpeaking will be
-        // set true only when the audio actually starts playing.
+        // Audio will follow shortly via playTTS, which shows a "buffering"
+        // indicator during fetch then switches to "speaking" when audio plays.
         setAiTyping(false)
 
         // Auto-speak the first question (don't await — let it play in background)
@@ -1205,8 +1299,8 @@ export default function InterviewCoach() {
         setMessages((prev) => [...prev, feedbackMsg])
 
         // Clear "thinking" state immediately — the text is now visible.
-        // Audio will follow via playTTS, and isAiSpeaking will be set true
-        // only when the audio actually starts playing (not during the TTS fetch).
+        // Audio will follow via playTTS, which shows a "buffering" indicator
+        // during the TTS fetch, then switches to "speaking" when audio plays.
         setAiTyping(false)
         setIsSending(false)
 
@@ -2262,7 +2356,7 @@ export default function InterviewCoach() {
                 sizes="32px"
               />
             </div>
-            {isAiSpeaking && (
+            {(isAiSpeaking || isAiBuffering) && (
               <motion.div
                 className={`absolute -right-0.5 -top-0.5 size-2.5 rounded-full sm:size-3 ${selectedInterviewer.accentColor.replace('text-', 'bg-')}`}
                 animate={{ scale: [1, 1.4, 1], opacity: [1, 0.6, 1] }}
@@ -2329,7 +2423,7 @@ export default function InterviewCoach() {
         >
           <InterviewAvatar
             interviewer={selectedInterviewer}
-            isSpeaking={isAiSpeaking}
+            isSpeaking={isAiSpeaking || isAiBuffering}
             audioElementRef={currentAudioRef}
             size={240}
           />
@@ -2342,9 +2436,22 @@ export default function InterviewCoach() {
           animate={{ y: 0, opacity: 1 }}
           transition={{ delay: 0.3 }}
         >
-          {isAiSpeaking && (
+          {(isAiBuffering || isAiSpeaking) && (
             <span className={`flex items-center gap-1 text-xs font-medium ${selectedInterviewer.accentColor}`}>
-              <AiSpeakingIndicator />
+              {isAiBuffering ? (
+                <div className="flex items-center justify-center gap-1">
+                  {[...Array(4)].map((_, i) => (
+                    <motion.div
+                      key={i}
+                      className="size-1.5 rounded-full bg-teal-400/60"
+                      animate={{ opacity: [0.3, 0.7, 0.3] }}
+                      transition={{ duration: 1.2, repeat: Infinity, delay: i * 0.2 }}
+                    />
+                  ))}
+                </div>
+              ) : (
+                <AiSpeakingIndicator />
+              )}
             </span>
           )}
           <span className={`text-xs font-semibold ${selectedInterviewer.accentColor}`}>
@@ -2354,31 +2461,44 @@ export default function InterviewCoach() {
 
         {/* Status Indicators */}
         <AnimatePresence mode="wait">
-          {isAiSpeaking && (
+          {(isAiBuffering || isAiSpeaking) && (
             <motion.div
-              key="speaking"
+              key={isAiBuffering ? 'buffering' : 'speaking'}
               className="mt-2 flex items-center gap-2"
               initial={{ opacity: 0, y: 5 }}
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: -5 }}
             >
-              <div className="flex items-center gap-1">
-                {[...Array(5)].map((_, i) => (
-                  <motion.div
-                    key={i}
-                    className={`w-1 rounded-full ${selectedInterviewer.accentColor.replace('text-', 'bg-')}`}
-                    animate={{ height: [4, 12 + i * 2, 6, 16 - i, 4] }}
-                    transition={{ duration: 0.6 + i * 0.08, repeat: Infinity, repeatType: 'reverse', ease: 'easeInOut' }}
-                  />
-                ))}
-              </div>
+              {isAiBuffering ? (
+                <div className="flex items-center gap-1">
+                  {[...Array(4)].map((_, i) => (
+                    <motion.div
+                      key={i}
+                      className="size-1.5 rounded-full bg-teal-400/60"
+                      animate={{ opacity: [0.3, 0.7, 0.3] }}
+                      transition={{ duration: 1.2, repeat: Infinity, delay: i * 0.2 }}
+                    />
+                  ))}
+                </div>
+              ) : (
+                <div className="flex items-center gap-1">
+                  {[...Array(5)].map((_, i) => (
+                    <motion.div
+                      key={i}
+                      className={`w-1 rounded-full ${selectedInterviewer.accentColor.replace('text-', 'bg-')}`}
+                      animate={{ height: [4, 12 + i * 2, 6, 16 - i, 4] }}
+                      transition={{ duration: 0.6 + i * 0.08, repeat: Infinity, repeatType: 'reverse', ease: 'easeInOut' }}
+                    />
+                  ))}
+                </div>
+              )}
               <span className={`text-[11px] font-medium ${selectedInterviewer.accentColor}`}>
-                {selectedInterviewer.name} is speaking...
+                {isAiBuffering ? `${selectedInterviewer.name} is preparing...` : `${selectedInterviewer.name} is speaking...`}
               </span>
             </motion.div>
           )}
 
-          {aiTyping && !isAiSpeaking && (
+          {aiTyping && !isAiSpeaking && !isAiBuffering && (
             <motion.div
               key="thinking"
               className="mt-2 flex items-center gap-2"
@@ -2423,7 +2543,7 @@ export default function InterviewCoach() {
             </motion.div>
           )}
 
-          {!isAiSpeaking && !aiTyping && !isTranscribing && !isRecording && inputMode === 'voice' && (
+          {!isAiSpeaking && !isAiBuffering && !aiTyping && !isTranscribing && !isRecording && inputMode === 'voice' && (
             <motion.div
               key="ready"
               className="mt-2"
@@ -2438,7 +2558,7 @@ export default function InterviewCoach() {
 
         {/* Current Question Subtitle */}
         <AnimatePresence>
-          {latestAiQuestion && !isAiSpeaking && (
+          {latestAiQuestion && !isAiSpeaking && !isAiBuffering && (
             <motion.div
               className="mx-4 mt-4 max-w-lg"
               initial={{ opacity: 0, y: 10 }}
@@ -2688,7 +2808,7 @@ export default function InterviewCoach() {
           {inputMode === 'voice' ? (
             <motion.button
               onClick={handleMicPress}
-              disabled={isSending || aiTyping || isTranscribing || isAiSpeaking}
+              disabled={isSending || aiTyping || isTranscribing || isAiSpeaking || isAiBuffering}
               className={`relative flex size-16 items-center justify-center rounded-full transition-all sm:size-20 ${
                 isRecording
                   ? 'bg-red-500 text-white shadow-lg shadow-red-500/40'
@@ -2768,7 +2888,7 @@ export default function InterviewCoach() {
         </div>
 
         {/* Hint text */}
-        {inputMode === 'voice' && !isRecording && !isTranscribing && !isAiSpeaking && (
+        {inputMode === 'voice' && !isRecording && !isTranscribing && !isAiSpeaking && !isAiBuffering && (
           <motion.p
             className="mt-2 text-center text-[10px] text-white/25"
             initial={{ opacity: 0 }}
