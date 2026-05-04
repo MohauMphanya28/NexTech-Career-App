@@ -26,9 +26,47 @@ export async function POST(req: NextRequest) {
       interviewerPersonality,
       interviewerName,
       conversationHistory = [],
+      candidateContext = null,
     } = await req.json()
 
     const zai = await getZAI()
+
+    // Build candidate context text if available
+    let candidateContextText = ''
+    if (candidateContext) {
+      const ctx = candidateContext as {
+        jobTitle?: string
+        company?: string
+        summary?: string
+        skills?: string[]
+        experience?: Array<{ title: string; company: string; period: string; description: string }>
+        education?: Array<{ degree: string; institution: string; year: string }>
+        hasCoverLetter?: boolean
+        coverLetterJobTitle?: string
+        coverLetterCompany?: string
+      }
+      const parts: string[] = []
+      if (ctx.jobTitle) parts.push(`- Target Job Title: ${ctx.jobTitle}`)
+      if (ctx.company) parts.push(`- Target Company: ${ctx.company}`)
+      if (ctx.summary) parts.push(`- Summary: ${ctx.summary}`)
+      if (ctx.skills && ctx.skills.length > 0) parts.push(`- Key Skills: ${ctx.skills.join(', ')}`)
+      if (ctx.experience && ctx.experience.length > 0) {
+        const expLines = ctx.experience.map(e => `  * ${e.title} at ${e.company} (${e.period})`).join('\n')
+        parts.push(`- Experience:\n${expLines}`)
+      }
+      if (ctx.education && ctx.education.length > 0) {
+        const eduLines = ctx.education.map(e => `  * ${e.degree} from ${e.institution} (${e.year})`).join('\n')
+        parts.push(`- Education:\n${eduLines}`)
+      }
+      if (ctx.hasCoverLetter) {
+        const clTarget = ctx.coverLetterJobTitle || ctx.jobTitle || 'the role'
+        const clCompany = ctx.coverLetterCompany || ctx.company || 'the company'
+        parts.push(`- Has prepared a cover letter: Yes, for ${clTarget} at ${clCompany}`)
+      }
+      if (parts.length > 0) {
+        candidateContextText = `\nCANDIDATE CONTEXT:\n${parts.join('\n')}\n\nIMPORTANT: Use this context to tailor your questions specifically to this candidate's background and career goals. Ask questions relevant to their target role and company. If they have no experience in the field, acknowledge this and ask about transferable skills and motivation.\n`
+      }
+    }
 
     // Build personality-aware system prompt
     const personalityInstruction = interviewerPersonality
@@ -50,7 +88,7 @@ export async function POST(req: NextRequest) {
 
     if (action === 'start') {
       const systemPrompt = `${personalityInstruction}${namePrefix}You are conducting a mock interview for a ${industry || 'general'} position in South Africa.
-
+${candidateContextText}
 IMPORTANT CONVERSATION RULES:
 - Speak naturally, like a real human interviewer having a conversation — NOT like a robot reading a script.
 - Use natural conversational fillers occasionally: "Hmm", "I see", "That's interesting", "Right", "Okay".
@@ -84,8 +122,17 @@ Start by greeting the candidate warmly and asking the first interview question. 
     if (action === 'evaluate') {
       const isLastQuestion = questionNumber >= totalQuestions
 
-      const systemPrompt = `${personalityInstruction}${namePrefix}You are an expert interview coach conducting a mock interview.
+      // Build candidate context reminder for evaluate
+      let evaluateContextReminder = ''
+      if (candidateContext) {
+        const ctx = candidateContext as { jobTitle?: string; company?: string }
+        const jobTitle = ctx.jobTitle || 'the role'
+        const company = ctx.company || 'the company'
+        evaluateContextReminder = `\nRemember: This candidate is targeting a ${jobTitle} role at ${company}. Evaluate their answers in the context of this specific role.\n`
+      }
 
+      const systemPrompt = `${personalityInstruction}${namePrefix}You are an expert interview coach conducting a mock interview.
+${evaluateContextReminder}
 IMPORTANT CONVERSATION RULES:
 - Speak naturally, like a real human interviewer — NOT like a robot reading a script.
 - Use natural conversational fillers occasionally: "Hmm", "I see", "That's interesting", "Right", "Okay".

@@ -102,14 +102,20 @@ export default function CoverLetterGenerator() {
     setCurrentView,
     isLoading,
     setIsLoading,
+    careerContext,
+    setCareerContext,
   } = useAppStore()
 
   // ── Local State ──────────────────────────────────────────────────────────
   const [phase, setPhase] = useState<Phase>(
     coverLetterContent ? 'preview' : 'input'
   )
-  const [localJobTitle, setLocalJobTitle] = useState(coverLetterJobTitle)
-  const [localCompany, setLocalCompany] = useState(coverLetterCompany)
+  const [localJobTitle, setLocalJobTitle] = useState(
+    coverLetterJobTitle || careerContext.resumeJobTitle || ''
+  )
+  const [localCompany, setLocalCompany] = useState(
+    coverLetterCompany || careerContext.resumeCompany || ''
+  )
   const [localJobDesc, setLocalJobDesc] = useState(coverLetterJobDesc)
   const [localTone, setLocalTone] = useState(coverLetterTone)
   const [editableContent, setEditableContent] = useState(coverLetterContent)
@@ -235,6 +241,16 @@ export default function CoverLetterGenerator() {
     setCoverLetterCompany(localCompany)
     setCoverLetterJobDesc(localJobDesc)
     setCoverLetterTone(localTone)
+
+    // Save career context for other components
+    setCareerContext({
+      coverLetterJobTitle: localJobTitle,
+      coverLetterCompany: localCompany,
+      coverLetterTone: localTone,
+      coverLetterCompleted: true,
+      currentStep: 'interview',
+    })
+
     toast.success('Cover letter saved!')
   }, [
     editableContent,
@@ -247,6 +263,7 @@ export default function CoverLetterGenerator() {
     setCoverLetterCompany,
     setCoverLetterJobDesc,
     setCoverLetterTone,
+    setCareerContext,
   ])
 
   const handleCopy = useCallback(async () => {

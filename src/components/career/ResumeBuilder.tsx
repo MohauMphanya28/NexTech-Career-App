@@ -228,6 +228,7 @@ export default function ResumeBuilder() {
     isLoading,
     setIsLoading,
     user,
+    setCareerContext,
   } = useAppStore()
 
   // ── Local Form State ────────────────────────────────────────────────────
@@ -501,6 +502,20 @@ export default function ResumeBuilder() {
 
       setCurrentResume(resumeData)
 
+      // Save career context for other components to use
+      const savedExperience = resumeData.experience || []
+      const savedEducation = resumeData.education || []
+      setCareerContext({
+        resumeJobTitle: savedExperience.length > 0 ? savedExperience[0].title : '',
+        resumeCompany: savedExperience.length > 0 ? savedExperience[0].company : '',
+        resumeSummary: resumeData.summary || '',
+        resumeSkills: resumeData.skills || [],
+        resumeExperience: savedExperience,
+        resumeEducation: savedEducation,
+        resumeCompleted: true,
+        currentStep: 'cover-letter',
+      })
+
       // Update user data on the backend
       try {
         await fetch('/api/user', {
@@ -537,6 +552,7 @@ export default function ResumeBuilder() {
     setCurrentResume,
     setCurrentView,
     setIsLoading,
+    setCareerContext,
   ])
 
   // ── Skills Toggle ───────────────────────────────────────────────────────

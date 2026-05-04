@@ -96,6 +96,39 @@ interface ResumeAnalysis {
   keyInsight: string
 }
 
+export interface CareerContext {
+  // From resume
+  resumeJobTitle: string
+  resumeCompany: string
+  resumeSummary: string
+  resumeSkills: string[]
+  resumeExperience: Array<{
+    title: string
+    company: string
+    period: string
+    description: string
+  }>
+  resumeEducation: Array<{
+    degree: string
+    institution: string
+    year: string
+  }>
+  resumeCompleted: boolean
+
+  // From cover letter
+  coverLetterJobTitle: string
+  coverLetterCompany: string
+  coverLetterTone: string
+  coverLetterCompleted: boolean
+
+  // From interview
+  lastInterviewScore: number
+  interviewCompleted: boolean
+
+  // Progress tracking
+  currentStep: 'resume' | 'cover-letter' | 'interview' | 'complete'
+}
+
 interface AppState {
   // Navigation
   currentView: AppView
@@ -142,6 +175,11 @@ interface AppState {
   setInterviewSession: (session: InterviewSession | null) => void
   interviewHistory: InterviewSession[]
   setInterviewHistory: (history: InterviewSession[]) => void
+
+  // Career Context (linked data flow)
+  careerContext: CareerContext
+  setCareerContext: (ctx: Partial<CareerContext>) => void
+  resetCareerContext: () => void
 
   // Loading states
   isLoading: boolean
@@ -196,6 +234,45 @@ export const useAppStore = create<AppState>((set) => ({
   setInterviewSession: (session) => set({ interviewSession: session }),
   interviewHistory: [],
   setInterviewHistory: (history) => set({ interviewHistory: history }),
+
+  // Career Context
+  careerContext: {
+    resumeJobTitle: '',
+    resumeCompany: '',
+    resumeSummary: '',
+    resumeSkills: [],
+    resumeExperience: [],
+    resumeEducation: [],
+    resumeCompleted: false,
+    coverLetterJobTitle: '',
+    coverLetterCompany: '',
+    coverLetterTone: 'formal',
+    coverLetterCompleted: false,
+    lastInterviewScore: 0,
+    interviewCompleted: false,
+    currentStep: 'resume',
+  },
+  setCareerContext: (ctx) => set((state) => ({
+    careerContext: { ...state.careerContext, ...ctx }
+  })),
+  resetCareerContext: () => set(() => ({
+    careerContext: {
+      resumeJobTitle: '',
+      resumeCompany: '',
+      resumeSummary: '',
+      resumeSkills: [],
+      resumeExperience: [],
+      resumeEducation: [],
+      resumeCompleted: false,
+      coverLetterJobTitle: '',
+      coverLetterCompany: '',
+      coverLetterTone: 'formal',
+      coverLetterCompleted: false,
+      lastInterviewScore: 0,
+      interviewCompleted: false,
+      currentStep: 'resume',
+    }
+  })),
 
   // Loading
   isLoading: false,

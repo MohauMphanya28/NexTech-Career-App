@@ -4,6 +4,7 @@ import { useAppStore } from '@/lib/store'
 import OnboardingFlow from '@/components/career/OnboardingFlow'
 import Dashboard from '@/components/career/Dashboard'
 import Navbar from '@/components/career/Navbar'
+import CareerGuide from '@/components/career/CareerGuide'
 import ResumeBuilder from '@/components/career/ResumeBuilder'
 import ResumeAnalyzer from '@/components/career/ResumeAnalyzer'
 import CoverLetterGenerator from '@/components/career/CoverLetterGenerator'
@@ -136,6 +137,7 @@ export default function Home() {
       {currentView === 'progress' && <ProgressTracker />}
       {currentView === 'profile' && <ProfileView />}
       <Navbar />
+      <CareerGuide />
     </div>
   )
 }

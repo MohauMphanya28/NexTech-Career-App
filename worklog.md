@@ -692,3 +692,47 @@ Stage Summary:
 - `playTTSAndWait` provides reliable audio-completion detection with safety timeout
 - Minimum delay ensures smooth visual transition even if TTS is very fast
 - No more jarring cut-off of the interviewer's closing words
+
+---
+Task ID: 3
+Agent: CareerGuide Chatbot Component
+Task: Create floating chatbot-style guide component for the NexTech Career App
+
+Work Log:
+- Read existing store.ts to understand current structure — found no `careerContext` yet
+- Added `CareerContext` interface to store.ts with all required fields (resumeJobTitle, resumeCompany, resumeSummary, resumeSkills, resumeExperience, resumeEducation, resumeCompleted, coverLetterJobTitle, coverLetterCompany, coverLetterTone, coverLetterCompleted, lastInterviewScore, interviewCompleted, currentStep)
+- Added `careerContext` initial state and `setCareerContext` partial update method to the Zustand store
+- Exported `CareerContext` interface for use by other components
+- Created `/home/z/my-project/src/components/career/CareerGuide.tsx`:
+  - Floating teal button in bottom-right corner (above navbar at bottom-24)
+  - Animated button with pulse ring and notification dot when new messages exist
+  - Icon swap animation (MessageCircle ↔ X) with rotation transitions
+  - Expandable chat-style panel with slide-up animation via Framer Motion
+  - Contextual messages based on `careerContext` and `currentView`:
+    - 'start-resume': Next-step tip on dashboard when resume not completed
+    - 'next-cover-letter': Prompt to create cover letter after resume is done
+    - 'next-interview': Prompt to practice interview after cover letter
+    - 'interview-done': Success message with score after interview completed
+    - 'resume-tip': View-specific tip when on resume page
+    - 'cover-letter-context': Tip about auto-filled data on cover letter page
+    - 'interview-context': Tip about tailored interview questions
+  - Each message type has distinct styling (teal for next-step, amber for tip, emerald for success, purple for motivation)
+  - Dismissable messages with per-message X button and dismissedMessages state
+  - Action buttons on messages navigate to the relevant view
+  - Progress indicator at panel bottom showing 3-dot progress (resume → cover letter → interview)
+  - Hidden during onboarding view and when no messages exist
+  - Fully responsive (full-width on mobile, 320px on desktop)
+  - Backdrop blur and glass effect on panel
+- Integrated CareerGuide into `/home/z/my-project/src/app/page.tsx`:
+  - Added import for CareerGuide
+  - Added `<CareerGuide />` after `<Navbar />` in the main layout
+- Ran ESLint on CareerGuide.tsx, page.tsx, and store.ts — all passed with no errors
+- Verified dev server compiles successfully
+
+Stage Summary:
+- CareerContext added to Zustand store with partial update method
+- Floating CareerGuide chatbot component created with contextual messages
+- Smooth Framer Motion animations (pulse, slide-up, icon rotation)
+- Responsive design, accessible (aria-labels), dismissable messages
+- Integrated into main page layout
+- All files pass lint checks

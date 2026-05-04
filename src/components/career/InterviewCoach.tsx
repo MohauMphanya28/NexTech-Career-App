@@ -629,11 +629,15 @@ export default function InterviewCoach() {
     setIsLoading,
     aiTyping,
     setAiTyping,
+    careerContext,
+    setCareerContext,
   } = useAppStore()
 
   // Local state
   const [mode, setMode] = useState<InterviewMode>('setup')
-  const [selectedIndustry, setSelectedIndustry] = useState('Technology')
+  const [selectedIndustry, setSelectedIndustry] = useState(
+    careerContext.resumeCompleted && careerContext.resumeJobTitle ? 'General' : 'Technology'
+  )
   const [questionCount, setQuestionCount] = useState(5)
   const [messages, setMessages] = useState<ChatMessage[]>([])
   const [currentInput, setCurrentInput] = useState('')
@@ -744,6 +748,33 @@ export default function InterviewCoach() {
     }
     checkPermission()
   }, [])
+
+  // ─── Auto-derive industry from career context ──────────────────────────
+
+  useEffect(() => {
+    if (careerContext.resumeCompleted && careerContext.resumeJobTitle) {
+      const jobTitle = careerContext.resumeJobTitle.toLowerCase()
+      const industryMap: Record<string, string[]> = {
+        Technology: ['software', 'developer', 'engineer', 'data', 'it ', 'tech', 'analyst', 'programmer', 'web', 'cyber'],
+        Finance: ['accountant', 'financial', 'bank', 'audit', 'investment', 'finance', 'actuarial'],
+        Healthcare: ['nurse', 'doctor', 'medical', 'health', 'pharma', 'clinical', 'surgeon', 'therapist'],
+        Retail: ['retail', 'store', 'sales', 'merchand', 'cashier', 'chef', 'cook', 'restaurant', 'hospitality', 'waiter'],
+        Government: ['government', 'municipal', 'public service', 'civil', 'police', 'defence'],
+        Education: ['teacher', 'lecturer', 'education', 'tutor', 'academic', 'professor', 'trainer'],
+        Engineering: ['engineer', 'mechanical', 'electrical', 'civil engineer', 'mining', 'construction'],
+        Creative: ['design', 'creative', 'marketing', 'content', 'media', 'graphic', 'artist', 'writer'],
+      }
+
+      for (const [industry, keywords] of Object.entries(industryMap)) {
+        if (keywords.some(kw => jobTitle.includes(kw))) {
+          setSelectedIndustry(industry)
+          return
+        }
+      }
+      // Default to General if no match
+      setSelectedIndustry('General')
+    }
+  }, [careerContext.resumeCompleted, careerContext.resumeJobTitle])
 
   // ─── Interview Timer ─────────────────────────────────────────────────
 
@@ -1227,6 +1258,17 @@ export default function InterviewCoach() {
           totalQuestions: questionCount,
           interviewerPersonality: selectedInterviewer.personality,
           interviewerName: selectedInterviewer.name,
+          candidateContext: careerContext.resumeCompleted ? {
+            jobTitle: careerContext.resumeJobTitle,
+            company: careerContext.resumeCompany,
+            summary: careerContext.resumeSummary,
+            skills: careerContext.resumeSkills,
+            experience: careerContext.resumeExperience,
+            education: careerContext.resumeEducation,
+            hasCoverLetter: careerContext.coverLetterCompleted,
+            coverLetterJobTitle: careerContext.coverLetterJobTitle,
+            coverLetterCompany: careerContext.coverLetterCompany,
+          } : null,
         }),
       })
 
@@ -1327,6 +1369,17 @@ export default function InterviewCoach() {
           interviewerPersonality: selectedInterviewer.personality,
           interviewerName: selectedInterviewer.name,
           conversationHistory,
+          candidateContext: careerContext.resumeCompleted ? {
+            jobTitle: careerContext.resumeJobTitle,
+            company: careerContext.resumeCompany,
+            summary: careerContext.resumeSummary,
+            skills: careerContext.resumeSkills,
+            experience: careerContext.resumeExperience,
+            education: careerContext.resumeEducation,
+            hasCoverLetter: careerContext.coverLetterCompleted,
+            coverLetterJobTitle: careerContext.coverLetterJobTitle,
+            coverLetterCompany: careerContext.coverLetterCompany,
+          } : null,
         }),
       })
 
@@ -1416,6 +1469,13 @@ export default function InterviewCoach() {
                 setInterviewSession(completedSession)
                 setInterviewHistory([...interviewHistory, completedSession])
               }
+
+              // Update career context with interview results
+              setCareerContext({
+                lastInterviewScore: overallScore,
+                interviewCompleted: true,
+                currentStep: 'complete',
+              })
             })
 
             return currentLiveScores // Don't modify — just read for final calculation
@@ -1459,7 +1519,7 @@ export default function InterviewCoach() {
         setIsSending(false)
       }
     }
-  }, [currentQuestionNum, selectedIndustry, questionCount, interviewSession, interviewHistory, playTTS, playTTSAndWait, stopTTS, setInterviewSession, setInterviewHistory, setAiTyping, setIsLoading])
+  }, [currentQuestionNum, selectedIndustry, questionCount, interviewSession, interviewHistory, playTTS, playTTSAndWait, stopTTS, setInterviewSession, setInterviewHistory, setAiTyping, setIsLoading, careerContext, setCareerContext])
 
   // Keep the ref updated with the latest sendAnswer to avoid stale closures
   useEffect(() => {
@@ -1546,6 +1606,17 @@ export default function InterviewCoach() {
             totalQuestions: questionCount,
             interviewerPersonality: selectedInterviewer.personality,
             interviewerName: selectedInterviewer.name,
+            candidateContext: careerContext.resumeCompleted ? {
+              jobTitle: careerContext.resumeJobTitle,
+              company: careerContext.resumeCompany,
+              summary: careerContext.resumeSummary,
+              skills: careerContext.resumeSkills,
+              experience: careerContext.resumeExperience,
+              education: careerContext.resumeEducation,
+              hasCoverLetter: careerContext.coverLetterCompleted,
+              coverLetterJobTitle: careerContext.coverLetterJobTitle,
+              coverLetterCompany: careerContext.coverLetterCompany,
+            } : null,
           }),
         })
         const data = await res.json()
