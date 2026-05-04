@@ -1,6 +1,6 @@
 'use client'
 
-import { LayoutDashboard, FileText, Mail, Mic, FolderOpen } from 'lucide-react'
+import { LayoutDashboard, FileText, Mail, Mic, FolderOpen, User } from 'lucide-react'
 import { useAppStore, type AppView } from '@/lib/store'
 
 interface NavTab {
@@ -15,6 +15,7 @@ const tabs: NavTab[] = [
   { id: 'cover-letter', label: 'Letter', icon: Mail },
   { id: 'interview', label: 'Interview', icon: Mic },
   { id: 'documents', label: 'My Docs', icon: FolderOpen },
+  { id: 'profile', label: 'Profile', icon: User },
 ]
 
 export default function Navbar() {
@@ -26,7 +27,7 @@ export default function Navbar() {
       role="navigation"
       aria-label="Main navigation"
     >
-      <div className="mx-auto flex max-w-lg items-center justify-around px-2 py-3">
+      <div className="mx-auto flex max-w-lg items-center justify-around px-1 py-2">
         {tabs.map((tab) => {
           const isActive = currentView === tab.id
           const Icon = tab.icon
@@ -36,10 +37,9 @@ export default function Navbar() {
               key={tab.id}
               onClick={() => setCurrentView(tab.id)}
               className={`
-                flex flex-col items-center gap-1 rounded-xl px-3 py-2 transition-all duration-200
-                min-w-[60px] touch-manipulation select-none
-                ${
-                  isActive
+                flex flex-col items-center gap-0.5 rounded-xl px-2 py-1.5 transition-all duration-200
+                min-w-[48px] touch-manipulation select-none
+                ${isActive
                     ? 'text-teal-400'
                     : 'text-muted-foreground hover:text-foreground/70 active:scale-95'
                 }
@@ -54,7 +54,7 @@ export default function Navbar() {
                 strokeWidth={isActive ? 2.5 : 2}
               />
               <span
-                className={`text-[10px] font-medium leading-none ${
+                className={`text-[9px] font-medium leading-none ${
                   isActive ? 'text-teal-400' : ''
                 }`}
               >

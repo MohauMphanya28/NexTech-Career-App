@@ -1,6 +1,6 @@
 import { create } from 'zustand'
 
-export type AppView = 'dashboard' | 'onboarding' | 'resume' | 'resume-analyzer' | 'cover-letter' | 'interview' | 'progress' | 'profile' | 'documents'
+export type AppView = 'dashboard' | 'onboarding' | 'resume' | 'resume-analyzer' | 'cover-letter' | 'interview' | 'progress' | 'profile' | 'documents' | 'auth'
 
 interface UserProfile {
   id: string
@@ -187,6 +187,14 @@ interface AppState {
   dbUserId: string | null
   setDbUserId: (id: string | null) => void
 
+  // Seamless flow: auto-generate cover letter after resume
+  pendingCoverLetterGenerate: boolean
+  setPendingCoverLetterGenerate: (pending: boolean) => void
+
+  // Authentication
+  isAuthenticated: boolean
+  setIsAuthenticated: (auth: boolean) => void
+
   // Loading states
   isLoading: boolean
   setIsLoading: (loading: boolean) => void
@@ -285,6 +293,14 @@ export const useAppStore = create<AppState>((set) => ({
   setSavedDocuments: (docs) => set({ savedDocuments: docs }),
   dbUserId: null,
   setDbUserId: (id) => set({ dbUserId: id }),
+
+  // Seamless flow
+  pendingCoverLetterGenerate: false,
+  setPendingCoverLetterGenerate: (pending) => set({ pendingCoverLetterGenerate: pending }),
+
+  // Authentication
+  isAuthenticated: false,
+  setIsAuthenticated: (auth) => set({ isAuthenticated: auth }),
 
   // Loading
   isLoading: false,

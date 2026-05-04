@@ -180,6 +180,7 @@ export default function OnboardingFlow() {
     setCurrentView,
     setOnboardingStep,
     setDbUserId,
+    setIsAuthenticated,
   } = useAppStore()
 
   const [currentStep, setCurrentStep] = useState(0)
@@ -328,6 +329,14 @@ export default function OnboardingFlow() {
               setDbUserId(apiData.user.id)
               // Also update the user profile with the real DB ID
               setUser({ ...profileData, id: apiData.user.id })
+              // Set authenticated and persist in localStorage
+              setIsAuthenticated(true)
+              if (typeof window !== 'undefined') {
+                localStorage.setItem('nextech_auth', JSON.stringify({
+                  userId: apiData.user.id,
+                  email: '',
+                }))
+              }
             }
           })
           .catch(console.error)

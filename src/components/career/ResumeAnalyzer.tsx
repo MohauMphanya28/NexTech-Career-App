@@ -428,12 +428,33 @@ export default function ResumeAnalyzer() {
       atsScore: improved.atsScore,
     }
 
-    useAppStore.getState().setCurrentResume(resumeData)
-    useAppStore.getState().setResumeStep(5) // Jump to preview
+    const storeState = useAppStore.getState()
+    storeState.setCurrentResume(resumeData)
+    storeState.setResumeStep(5) // Jump to preview
+
+    // Set career context so cover letter generator has all the data it needs
+    const jobTitle = improved.experience?.[0]?.title || ''
+    const company = improved.experience?.[0]?.company || ''
+    storeState.setCareerContext({
+      resumeJobTitle: jobTitle,
+      resumeCompany: company,
+      resumeSummary: improved.summary || '',
+      resumeSkills: improved.skills || [],
+      resumeExperience: improved.experience || [],
+      resumeEducation: improved.education || [],
+      resumeCompleted: true,
+      currentStep: 'cover-letter',
+    })
+
+    // Pre-fill cover letter fields in the store
+    storeState.setCoverLetterJobTitle(jobTitle)
+    storeState.setCoverLetterCompany(company)
+
+    // Flag that we want to auto-generate the cover letter
+    storeState.setPendingCoverLetterGenerate(true)
 
     // Save the improved resume to database
     try {
-      const storeState = useAppStore.getState()
       let userId = storeState.dbUserId
       if (!userId) {
         try {
@@ -478,8 +499,9 @@ export default function ResumeAnalyzer() {
       // Non-critical — resume is loaded in builder
     }
 
-    setCurrentView('resume')
-    toast.success('Improved resume loaded & saved! Review it in the Resume Builder.')
+    // Redirect directly to cover letter generator with data pre-populated
+    setCurrentView('cover-letter')
+    toast.success('Resume saved! Now let\'s write your cover letter...')
   }, [analysis, setCurrentView, resumeFileName])
 
   // ── Reset ─────────────────────────────────────────────────────────────

@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useCallback, useMemo } from 'react'
+import { useState, useCallback, useMemo, useRef, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
   Sparkles,
@@ -10,6 +10,8 @@ import {
   RotateCcw,
   FileText,
   Check,
+  ArrowRight,
+  Mic,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -104,6 +106,8 @@ export default function CoverLetterGenerator() {
     setIsLoading,
     careerContext,
     setCareerContext,
+    pendingCoverLetterGenerate,
+    setPendingCoverLetterGenerate,
   } = useAppStore()
 
   // ── Local State ──────────────────────────────────────────────────────────
@@ -121,6 +125,7 @@ export default function CoverLetterGenerator() {
   const [editableContent, setEditableContent] = useState(coverLetterContent)
   const [copied, setCopied] = useState(false)
   const [generationProgress, setGenerationProgress] = useState(0)
+  const autoGenerateRef = useRef(false)
 
   // ── Derived ──────────────────────────────────────────────────────────────
   const wordCount = useMemo(() => {
@@ -323,6 +328,19 @@ export default function CoverLetterGenerator() {
   const handleGoBack = useCallback(() => {
     setCurrentView('dashboard')
   }, [setCurrentView])
+
+  // ── Auto-generate from resume flow ──────────────────────────────────────
+  useEffect(() => {
+    if (pendingCoverLetterGenerate && isFormValid && !autoGenerateRef.current && phase === 'input') {
+      autoGenerateRef.current = true
+      setPendingCoverLetterGenerate(false)
+      // Small delay to let the UI render before starting generation
+      const timer = setTimeout(() => {
+        handleGenerate()
+      }, 600)
+      return () => clearTimeout(timer)
+    }
+  }, [pendingCoverLetterGenerate, isFormValid, phase, handleGenerate, setPendingCoverLetterGenerate])
 
   // ── Phase: Input ─────────────────────────────────────────────────────────
 
@@ -740,6 +758,38 @@ export default function CoverLetterGenerator() {
             Feel free to edit the text above — this is <span className="text-foreground font-medium">your</span> letter.
             Make it personal, add specific examples, and ensure it sounds like you.
           </p>
+        </div>
+      </motion.div>
+
+      {/* Next Step CTA: Practice Interview */}
+      <motion.div
+        custom={5}
+        variants={fadeUp}
+        initial="hidden"
+        animate="visible"
+        className="glass-strong glow-teal-sm rounded-2xl p-5"
+      >
+        <div className="flex flex-col items-center gap-3 text-center">
+          <div className="flex size-12 items-center justify-center rounded-full bg-purple-400/15">
+            <Mic className="size-6 text-purple-400" />
+          </div>
+          <div>
+            <h3 className="text-base font-bold text-foreground">Ready for the next step?</h3>
+            <p className="mt-1 text-sm text-muted-foreground">
+              Practice your interview with AI — questions tailored to your resume & cover letter.
+            </p>
+          </div>
+          <Button
+            onClick={() => {
+              handleSave()
+              setTimeout(() => setCurrentView('interview'), 300)
+            }}
+            className="mt-1 gap-2 bg-purple-500 text-white hover:bg-purple-400 rounded-xl h-12"
+            size="lg"
+          >
+            Practice Interview
+            <ArrowRight className="size-4" />
+          </Button>
         </div>
       </motion.div>
     </motion.div>

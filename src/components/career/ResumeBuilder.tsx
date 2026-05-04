@@ -229,6 +229,7 @@ export default function ResumeBuilder() {
     setIsLoading,
     user,
     setCareerContext,
+    setPendingCoverLetterGenerate,
   } = useAppStore()
 
   // ── Local Form State ────────────────────────────────────────────────────
@@ -587,8 +588,10 @@ export default function ResumeBuilder() {
         // Non-critical, resume is already saved to store
       }
 
-      toast.success('Resume saved successfully!')
-      setCurrentView('dashboard')
+      // Seamless flow: redirect to cover letter generator
+      setPendingCoverLetterGenerate(true)
+      setCurrentView('cover-letter')
+      toast.success('Resume saved! Now let\'s write your cover letter...')
     } catch {
       toast.error('Failed to save resume.')
     } finally {
@@ -607,6 +610,7 @@ export default function ResumeBuilder() {
     setCurrentView,
     setIsLoading,
     setCareerContext,
+    setPendingCoverLetterGenerate,
   ])
 
   // ── Skills Toggle ───────────────────────────────────────────────────────
