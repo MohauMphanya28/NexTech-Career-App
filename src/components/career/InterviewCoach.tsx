@@ -22,8 +22,12 @@ import {
   PhoneOff,
   Clock,
   Headphones,
+  Video,
+  VideoOff,
+  MessageCircle,
 } from 'lucide-react'
 import { useAppStore } from '@/lib/store'
+import InterviewAvatar from '@/components/career/InterviewAvatar'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Card } from '@/components/ui/card'
@@ -597,6 +601,12 @@ export default function InterviewCoach() {
   // Restart with settings panel (on results screen)
   const [showRestartSettings, setShowRestartSettings] = useState(false)
 
+  // Camera & transcript state for Zoom-like UI
+  const [cameraOn, setCameraOn] = useState(false)
+  const [showTranscript, setShowTranscript] = useState(false)
+  const userVideoRef = useRef<HTMLVideoElement | null>(null)
+  const userStreamRef = useRef<MediaStream | null>(null)
+
   // Audio unlock ref for autoplay policy
   const audioContextRef = useRef<AudioContext | null>(null)
 
@@ -612,6 +622,35 @@ export default function InterviewCoach() {
   const sendAnswerRef = useRef<(text: string) => Promise<void>>(async () => {})
   // Ref for isMuted to avoid stale closures in playTTS
   const isMutedRef = useRef(false)
+
+  // ─── Toggle Camera ──────────────────────────────────────────────────
+
+  const toggleCamera = useCallback(async () => {
+    if (cameraOn) {
+      // Turn off
+      userStreamRef.current?.getTracks().forEach(t => t.stop())
+      userStreamRef.current = null
+      setCameraOn(false)
+    } else {
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: false })
+        userStreamRef.current = stream
+        if (userVideoRef.current) {
+          userVideoRef.current.srcObject = stream
+        }
+        setCameraOn(true)
+      } catch {
+        // Could not access camera - silent fail
+      }
+    }
+  }, [cameraOn])
+
+  // Cleanup camera on unmount
+  useEffect(() => {
+    return () => {
+      userStreamRef.current?.getTracks().forEach(t => t.stop())
+    }
+  }, [])
 
   // ─── Check Mic Permission ────────────────────────────────────────────
 
@@ -1305,6 +1344,10 @@ export default function InterviewCoach() {
   const handleEndInterview = () => {
     stopTTS()
     stopRecording()
+    // Clean up camera stream
+    userStreamRef.current?.getTracks().forEach(t => t.stop())
+    userStreamRef.current = null
+    setCameraOn(false)
     setShowEndConfirm(false)
 
     const overallScore = Math.round(
@@ -1368,6 +1411,11 @@ export default function InterviewCoach() {
   const handleReset = () => {
     stopTTS()
     stopRecording()
+    // Clean up camera stream
+    userStreamRef.current?.getTracks().forEach(t => t.stop())
+    userStreamRef.current = null
+    setCameraOn(false)
+    setShowTranscript(false)
     if (recordingTimeoutRef.current) {
       clearTimeout(recordingTimeoutRef.current)
       recordingTimeoutRef.current = null
@@ -1413,6 +1461,16 @@ export default function InterviewCoach() {
         : charCount <= 500
           ? `${charCount} chars — great length!`
           : `${charCount} chars — consider being more concise`
+
+  // ─── Derived state for interview mode UI ──────────────────────────────
+  const latestAiQuestion = useMemo(() => {
+    for (let i = messages.length - 1; i >= 0; i--) {
+      if (messages[i].role === 'ai') return messages[i].content
+    }
+    return ''
+  }, [messages])
+
+  const avgScore = Math.round(((liveScores.relevance + liveScores.clarity + liveScores.confidence) / 3) * 10) / 10
 
   // ═══════════════════════════════════════════════════════════════════════
   // RENDER
@@ -2098,337 +2156,438 @@ export default function InterviewCoach() {
   }
 
   // ═══════════════════════════════════════════════════════════════════════
-  // INTERVIEW MODE — Virtual Interview UI
+  // INTERVIEW MODE — Zoom-like Virtual Interview UI
   // ═══════════════════════════════════════════════════════════════════════
 
   return (
     <motion.div
-      className="flex min-h-screen flex-col"
+      className="relative flex min-h-screen flex-col bg-black/95"
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
     >
-      {/* ─── Top Bar: Virtual Interview Header ─────────────────────────── */}
-      <div className="sticky top-0 z-10 border-b border-border/30 bg-background/90 px-4 pb-3 pt-4 backdrop-blur-md">
-        <div className="mb-3 flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <div className={`relative flex size-10 items-center justify-center rounded-2xl ${selectedInterviewer.accentBg}`}>
-              <span className={`text-sm font-bold ${selectedInterviewer.accentColor}`}>{selectedInterviewer.initials}</span>
-              {isAiSpeaking && (
-                <motion.div
-                  className={`absolute -right-0.5 -top-0.5 size-3 rounded-full ${selectedInterviewer.accentColor.replace('text-', 'bg-')}`}
-                  animate={{ scale: [1, 1.3, 1], opacity: [1, 0.7, 1] }}
-                  transition={{ duration: 0.8, repeat: Infinity }}
-                />
-              )}
-            </div>
-            <div>
-              <p className="text-sm font-semibold text-foreground">
-                {selectedInterviewer.name} — {selectedIndustry}
-              </p>
-              <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                <span>Q{currentQuestionNum}/{questionCount}</span>
-                <span className="text-border">•</span>
-                <span className="flex items-center gap-1">
-                  <Clock className="size-3" />
-                  {formatDuration(interviewDuration)}
-                </span>
-              </div>
-            </div>
+      {/* ─── Top Bar ────────────────────────────────────────────────────── */}
+      <div className="relative z-20 flex items-center justify-between bg-black/60 px-3 py-2 backdrop-blur-md sm:px-4 sm:py-3">
+        {/* Left: Interviewer info */}
+        <div className="flex items-center gap-2 sm:gap-3">
+          <div className={`relative flex size-9 items-center justify-center rounded-xl sm:size-10 sm:rounded-2xl ${selectedInterviewer.accentBg}`}>
+            <span className={`text-xs font-bold sm:text-sm ${selectedInterviewer.accentColor}`}>{selectedInterviewer.initials}</span>
+            {isAiSpeaking && (
+              <motion.div
+                className={`absolute -right-0.5 -top-0.5 size-2.5 rounded-full sm:size-3 ${selectedInterviewer.accentColor.replace('text-', 'bg-')}`}
+                animate={{ scale: [1, 1.4, 1], opacity: [1, 0.6, 1] }}
+                transition={{ duration: 0.8, repeat: Infinity }}
+              />
+            )}
           </div>
-          <div className="flex items-center gap-2">
-            <Badge className="border-0 bg-teal-400/15 text-teal-400">
-              <Target className="mr-1 size-3" />
-              {Math.round(((liveScores.relevance + liveScores.clarity + liveScores.confidence) / 3) * 10) / 10} avg
-            </Badge>
-            {/* End Call Button */}
-            <motion.button
-              onClick={() => setShowEndConfirm(true)}
-              className="flex items-center gap-1.5 rounded-xl bg-red-500/15 px-3 py-1.5 text-xs font-semibold text-red-400 transition-colors hover:bg-red-500/25"
-              whileTap={{ scale: 0.9 }}
-              aria-label="End interview"
-            >
-              <PhoneOff className="size-3.5" />
-              End
-            </motion.button>
+          <div>
+            <p className="text-xs font-semibold text-white sm:text-sm">
+              {selectedInterviewer.name} <span className="hidden sm:inline">— {selectedIndustry}</span>
+            </p>
+            <p className="text-[10px] text-white/50 sm:text-xs">{selectedInterviewer.title}</p>
           </div>
         </div>
 
-        {/* Live Score Bars */}
-        <div className="flex flex-col gap-1.5">
-          <div className="flex items-center gap-3">
-            <span className="w-20 text-[11px] font-medium text-muted-foreground">Relevance</span>
-            <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-secondary">
-              <motion.div
-                className={`h-full rounded-full ${getScoreBgColor(liveScores.relevance)}`}
-                animate={{ width: `${liveScores.relevance * 10}%` }}
-                transition={{ duration: 0.5 }}
-              />
-            </div>
-            <span className={`w-8 text-right text-xs font-bold ${getScoreColor(liveScores.relevance)}`}>
-              {liveScores.relevance > 0 ? liveScores.relevance.toFixed(1) : '-'}
-            </span>
+        {/* Center: Timer + Progress */}
+        <div className="flex items-center gap-3 sm:gap-4">
+          <div className="flex items-center gap-1.5 text-white/80">
+            <Clock className="size-3.5 sm:size-4" />
+            <span className="font-mono text-xs tabular-nums sm:text-sm">{formatDuration(interviewDuration)}</span>
           </div>
-          <div className="flex items-center gap-3">
-            <span className="w-20 text-[11px] font-medium text-muted-foreground">Clarity</span>
-            <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-secondary">
-              <motion.div
-                className={`h-full rounded-full ${getScoreBgColor(liveScores.clarity)}`}
-                animate={{ width: `${liveScores.clarity * 10}%` }}
-                transition={{ duration: 0.5 }}
-              />
-            </div>
-            <span className={`w-8 text-right text-xs font-bold ${getScoreColor(liveScores.clarity)}`}>
-              {liveScores.clarity > 0 ? liveScores.clarity.toFixed(1) : '-'}
-            </span>
-          </div>
-          <div className="flex items-center gap-3">
-            <span className="w-20 text-[11px] font-medium text-muted-foreground">Confidence</span>
-            <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-secondary">
-              <motion.div
-                className={`h-full rounded-full ${getScoreBgColor(liveScores.confidence)}`}
-                animate={{ width: `${liveScores.confidence * 10}%` }}
-                transition={{ duration: 0.5 }}
-              />
-            </div>
-            <span className={`w-8 text-right text-xs font-bold ${getScoreColor(liveScores.confidence)}`}>
-              {liveScores.confidence > 0 ? liveScores.confidence.toFixed(1) : '-'}
-            </span>
+          <div className="flex items-center gap-1 rounded-full bg-white/10 px-2.5 py-1 text-xs font-medium text-white/80 sm:px-3">
+            <span>Q{currentQuestionNum}/{questionCount}</span>
           </div>
         </div>
 
-        {/* Progress bar */}
-        <div className="mt-3">
-          <Progress
-            value={(currentQuestionNum / questionCount) * 100}
-            className="h-1 bg-secondary"
+        {/* Right: Score + End */}
+        <div className="flex items-center gap-2 sm:gap-3">
+          <Badge className="border-0 bg-white/10 text-white/90">
+            <Target className="mr-1 size-3" />
+            {avgScore > 0 ? avgScore : '-'}
+          </Badge>
+          <motion.button
+            onClick={() => setShowEndConfirm(true)}
+            className="flex items-center gap-1.5 rounded-xl bg-red-500/20 px-2.5 py-1.5 text-xs font-semibold text-red-400 transition-colors hover:bg-red-500/30 sm:px-3"
+            whileTap={{ scale: 0.9 }}
+            aria-label="End interview"
+          >
+            <PhoneOff className="size-3.5" />
+            <span className="hidden sm:inline">End</span>
+          </motion.button>
+        </div>
+      </div>
+
+      {/* ─── Main Video Area ────────────────────────────────────────────── */}
+      <div className="relative flex flex-1 flex-col items-center justify-center overflow-hidden">
+        {/* Ambient glow */}
+        <div
+          className="pointer-events-none absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2"
+          style={{
+            width: 320,
+            height: 320,
+            borderRadius: '50%',
+            background: `radial-gradient(circle, ${selectedInterviewer.accentColor.includes('teal') ? 'rgba(20,184,166,0.08)' : selectedInterviewer.accentColor.includes('slate') ? 'rgba(148,163,184,0.08)' : selectedInterviewer.accentColor.includes('amber') ? 'rgba(245,158,11,0.08)' : selectedInterviewer.accentColor.includes('violet') ? 'rgba(139,92,246,0.08)' : 'rgba(244,63,94,0.08)'} 0%, transparent 70%)`,
+          }}
+        />
+
+        {/* AI Avatar */}
+        <motion.div
+          className="relative z-10"
+          initial={{ scale: 0.8, opacity: 0 }}
+          animate={{ scale: 1, opacity: 1 }}
+          transition={{ duration: 0.5 }}
+        >
+          <InterviewAvatar
+            interviewer={selectedInterviewer}
+            isSpeaking={isAiSpeaking}
+            audioElementRef={currentAudioRef}
+            size={240}
           />
-        </div>
-      </div>
+        </motion.div>
 
-      {/* ─── AI Speaking Overlay ────────────────────────────────────────── */}
-      <AnimatePresence>
-        {isAiSpeaking && (
-          <motion.div
-            className="glass-strong flex items-center justify-center gap-3 px-4 py-3"
-            initial={{ opacity: 0, height: 0 }}
-            animate={{ opacity: 1, height: 'auto' }}
-            exit={{ opacity: 0, height: 0 }}
-            transition={{ duration: 0.3 }}
-          >
-            <div className={`flex size-8 items-center justify-center rounded-full ${selectedInterviewer.accentBg}`}>
-              <Volume2 className={`size-4 ${selectedInterviewer.accentColor}`} />
-            </div>
-            <div className="flex flex-col">
-              <span className={`text-xs font-semibold ${selectedInterviewer.accentColor}`}>{selectedInterviewer.name} is speaking...</span>
+        {/* Interviewer Name Badge */}
+        <motion.div
+          className={`mt-3 flex items-center gap-2 rounded-full ${selectedInterviewer.accentBg} px-4 py-1.5`}
+          initial={{ y: 10, opacity: 0 }}
+          animate={{ y: 0, opacity: 1 }}
+          transition={{ delay: 0.3 }}
+        >
+          {isAiSpeaking && (
+            <span className={`flex items-center gap-1 text-xs font-medium ${selectedInterviewer.accentColor}`}>
               <AiSpeakingIndicator />
-            </div>
-            <motion.button
-              onClick={stopTTS}
-              className="ml-auto flex size-8 items-center justify-center rounded-lg bg-secondary/60 text-muted-foreground transition-colors hover:text-foreground"
-              whileTap={{ scale: 0.9 }}
-              aria-label="Stop speaking"
-            >
-              <VolumeX className="size-4" />
-            </motion.button>
-          </motion.div>
-        )}
-      </AnimatePresence>
+            </span>
+          )}
+          <span className={`text-xs font-semibold ${selectedInterviewer.accentColor}`}>
+            {selectedInterviewer.name}
+          </span>
+        </motion.div>
 
-      {/* ─── Transcribing Overlay ───────────────────────────────────────── */}
-      <AnimatePresence>
-        {isTranscribing && (
-          <motion.div
-            className="flex items-center justify-center gap-3 bg-purple-400/5 px-4 py-3"
-            initial={{ opacity: 0, height: 0 }}
-            animate={{ opacity: 1, height: 'auto' }}
-            exit={{ opacity: 0, height: 0 }}
-            transition={{ duration: 0.3 }}
-          >
+        {/* Status Indicators */}
+        <AnimatePresence mode="wait">
+          {isAiSpeaking && (
             <motion.div
-              className="flex size-8 items-center justify-center rounded-full bg-purple-400/20"
-              animate={{ rotate: 360 }}
-              transition={{ duration: 2, repeat: Infinity, ease: 'linear' }}
+              key="speaking"
+              className="mt-2 flex items-center gap-2"
+              initial={{ opacity: 0, y: 5 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -5 }}
             >
-              <Mic className="size-4 text-purple-400" />
+              <div className="flex items-center gap-1">
+                {[...Array(5)].map((_, i) => (
+                  <motion.div
+                    key={i}
+                    className={`w-1 rounded-full ${selectedInterviewer.accentColor.replace('text-', 'bg-')}`}
+                    animate={{ height: [4, 12 + i * 2, 6, 16 - i, 4] }}
+                    transition={{ duration: 0.6 + i * 0.08, repeat: Infinity, repeatType: 'reverse', ease: 'easeInOut' }}
+                  />
+                ))}
+              </div>
+              <span className={`text-[11px] font-medium ${selectedInterviewer.accentColor}`}>
+                {selectedInterviewer.name} is speaking...
+              </span>
             </motion.div>
-            <span className="text-xs font-semibold text-purple-400">Transcribing your answer...</span>
-          </motion.div>
-        )}
-      </AnimatePresence>
+          )}
 
-      {/* ─── Chat Messages ──────────────────────────────────────────────── */}
-      <div className="flex-1 overflow-y-auto px-4 py-4" style={{ maxHeight: 'calc(100vh - 320px)' }}>
-        <div className="flex flex-col gap-3">
-          <AnimatePresence mode="popLayout">
-            {messages.map((msg) => {
-              // AI message (left-aligned)
-              if (msg.role === 'ai') {
-                return (
+          {aiTyping && !isAiSpeaking && (
+            <motion.div
+              key="thinking"
+              className="mt-2 flex items-center gap-2"
+              initial={{ opacity: 0, y: 5 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -5 }}
+            >
+              <div className="flex gap-1">
+                {[0, 1, 2].map((i) => (
                   <motion.div
-                    key={msg.id}
-                    variants={messageVariants}
-                    initial="hidden"
-                    animate="visible"
-                    className="flex items-start gap-2"
-                  >
-                    <div className="flex size-8 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-teal-400 to-cyan-400">
-                      <span className="text-[10px] font-bold text-white">{selectedInterviewer.initials}</span>
-                    </div>
-                    <div className={`max-w-[80%] rounded-2xl rounded-tl-sm border-l-2 ${selectedInterviewer.accentBorder} bg-secondary/60 px-4 py-3`}>
-                      <p className="text-sm leading-relaxed text-foreground/90">
-                        {msg.content}
-                      </p>
-                      {/* Replay button */}
-                      <button
-                        onClick={() => handleReplayAudio(msg)}
-                        className={`mt-2 flex items-center gap-1.5 text-[11px] ${selectedInterviewer.accentColor}/70 transition-colors hover:${selectedInterviewer.accentColor}`}
-                        aria-label={isAiSpeaking ? 'Stop audio' : 'Replay audio'}
-                      >
-                        {isAiSpeaking ? (
-                          <>
-                            <VolumeX className="size-3" />
-                            Stop
-                          </>
-                        ) : (
-                          <>
-                            <Volume2 className="size-3" />
-                            Replay
-                          </>
-                        )}
-                      </button>
-                    </div>
-                  </motion.div>
-                )
-              }
+                    key={i}
+                    className="size-1.5 rounded-full bg-white/50"
+                    animate={{ y: [0, -4, 0], opacity: [0.4, 1, 0.4] }}
+                    transition={{ duration: 0.6, repeat: Infinity, delay: i * 0.15 }}
+                  />
+                ))}
+              </div>
+              <span className="text-[11px] font-medium text-white/50">
+                {selectedInterviewer.name} is thinking...
+              </span>
+            </motion.div>
+          )}
 
-              // User message (right-aligned)
-              if (msg.role === 'user') {
-                return (
-                  <motion.div
-                    key={msg.id}
-                    variants={messageVariants}
-                    initial="hidden"
-                    animate="visible"
-                    className="flex items-start justify-end gap-2"
-                  >
-                    <div className="max-w-[80%] rounded-2xl rounded-tr-sm bg-primary/20 px-4 py-3">
-                      <p className="text-sm leading-relaxed text-foreground/90">
-                        {msg.content}
-                      </p>
-                    </div>
-                  </motion.div>
-                )
-              }
+          {isTranscribing && (
+            <motion.div
+              key="transcribing"
+              className="mt-2 flex items-center gap-2"
+              initial={{ opacity: 0, y: 5 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -5 }}
+            >
+              <motion.div
+                className="flex size-4 items-center justify-center rounded-full bg-purple-400/20"
+                animate={{ rotate: 360 }}
+                transition={{ duration: 2, repeat: Infinity, ease: 'linear' }}
+              >
+                <Mic className="size-2.5 text-purple-400" />
+              </motion.div>
+              <span className="text-[11px] font-medium text-purple-400">
+                Transcribing your answer...
+              </span>
+            </motion.div>
+          )}
 
-              // Feedback message (centered)
-              if (msg.role === 'feedback') {
-                return (
-                  <motion.div
-                    key={msg.id}
-                    variants={messageVariants}
-                    initial="hidden"
-                    animate="visible"
-                    className="flex flex-col items-center gap-2 py-1"
+          {!isAiSpeaking && !aiTyping && !isTranscribing && !isRecording && inputMode === 'voice' && (
+            <motion.div
+              key="ready"
+              className="mt-2"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              transition={{ delay: 0.5 }}
+            >
+              <span className="text-[11px] text-white/30">Ready for your answer</span>
+            </motion.div>
+          )}
+        </AnimatePresence>
+
+        {/* Current Question Subtitle */}
+        <AnimatePresence>
+          {latestAiQuestion && !isAiSpeaking && (
+            <motion.div
+              className="mx-4 mt-4 max-w-lg"
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -5 }}
+              transition={{ delay: 0.2 }}
+            >
+              <div className="rounded-2xl bg-white/5 px-4 py-3 backdrop-blur-sm">
+                <p className="text-center text-xs leading-relaxed text-white/70 sm:text-sm">
+                  {latestAiQuestion}
+                </p>
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+
+        {/* ─── Collapsible Chat Transcript ────────────────────────────────── */}
+        <div className="absolute bottom-4 left-4 right-4 z-10 sm:bottom-6 sm:left-6 sm:right-auto sm:w-80">
+          {/* Toggle button */}
+          <motion.button
+            onClick={() => setShowTranscript(!showTranscript)}
+            className={`mb-2 flex items-center gap-1.5 rounded-full bg-white/10 px-3 py-1.5 text-[11px] font-medium text-white/60 transition-colors hover:bg-white/15 hover:text-white/80 ${showTranscript ? 'hidden' : ''}`}
+            whileTap={{ scale: 0.95 }}
+          >
+            <MessageCircle className="size-3" />
+            Transcript ({messages.length})
+          </motion.button>
+
+          <AnimatePresence>
+            {showTranscript && (
+              <motion.div
+                className="overflow-hidden rounded-2xl bg-black/60 backdrop-blur-md"
+                initial={{ height: 0, opacity: 0 }}
+                animate={{ height: 'auto', opacity: 1 }}
+                exit={{ height: 0, opacity: 0 }}
+                transition={{ duration: 0.3 }}
+              >
+                {/* Header */}
+                <div className="flex items-center justify-between border-b border-white/10 px-3 py-2">
+                  <span className="text-[11px] font-medium text-white/60">Transcript</span>
+                  <motion.button
+                    onClick={() => setShowTranscript(false)}
+                    className="flex size-5 items-center justify-center rounded-full text-white/40 transition-colors hover:bg-white/10 hover:text-white/70"
+                    whileTap={{ scale: 0.9 }}
+                    aria-label="Close transcript"
                   >
-                    <div className={`flex max-w-[90%] items-start gap-2 rounded-2xl ${selectedInterviewer.accentBg} px-4 py-3 ring-1 ring-${selectedInterviewer.accentColor.replace('text-', '')}/20`}>
-                      <Star className="mt-0.5 size-4 shrink-0 text-yellow-400" />
-                      <div>
-                        <p className="text-xs leading-relaxed text-foreground/75">
-                          {msg.content}
-                        </p>
-                        {msg.scores && (
-                          <div className="mt-2 flex gap-3">
-                            <span className={`text-[10px] font-bold ${getScoreColor(msg.scores.relevance)}`}>
-                              R:{msg.scores.relevance}
-                            </span>
-                            <span className={`text-[10px] font-bold ${getScoreColor(msg.scores.clarity)}`}>
-                              C:{msg.scores.clarity}
-                            </span>
-                            <span className={`text-[10px] font-bold ${getScoreColor(msg.scores.confidence)}`}>
-                              Co:{msg.scores.confidence}
-                            </span>
+                    <svg className="size-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                    </svg>
+                  </motion.button>
+                </div>
+
+                {/* Messages */}
+                <div className="max-h-48 overflow-y-auto px-3 py-2 sm:max-h-64" style={{ scrollbarWidth: 'thin', scrollbarColor: 'rgba(255,255,255,0.15) transparent' }}>
+                  <div className="flex flex-col gap-2">
+                    {messages.map((msg) => {
+                      if (msg.role === 'ai') {
+                        return (
+                          <div key={msg.id} className="flex items-start gap-2">
+                            <div className={`mt-0.5 flex size-5 shrink-0 items-center justify-center rounded-full ${selectedInterviewer.accentBg}`}>
+                              <span className={`text-[8px] font-bold ${selectedInterviewer.accentColor}`}>{selectedInterviewer.initials}</span>
+                            </div>
+                            <p className="text-[11px] leading-relaxed text-white/70">{msg.content}</p>
                           </div>
-                        )}
+                        )
+                      }
+                      if (msg.role === 'user') {
+                        return (
+                          <div key={msg.id} className="flex items-start justify-end gap-2">
+                            <p className="max-w-[80%] text-[11px] leading-relaxed text-white/50">{msg.content}</p>
+                          </div>
+                        )
+                      }
+                      if (msg.role === 'feedback') {
+                        return (
+                          <div key={msg.id} className="flex items-start gap-1.5 rounded-lg bg-white/5 px-2 py-1.5">
+                            <Star className="mt-0.5 size-3 shrink-0 text-yellow-400/70" />
+                            <div>
+                              <p className="text-[10px] leading-relaxed text-white/50">{msg.content}</p>
+                              {msg.scores && (
+                                <div className="mt-1 flex gap-2">
+                                  <span className="text-[9px] font-bold text-teal-400/70">R:{msg.scores.relevance}</span>
+                                  <span className="text-[9px] font-bold text-teal-400/70">C:{msg.scores.clarity}</span>
+                                  <span className="text-[9px] font-bold text-teal-400/70">Co:{msg.scores.confidence}</span>
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                        )
+                      }
+                      return null
+                    })}
+                    {aiTyping && (
+                      <div className="flex items-start gap-2">
+                        <div className={`mt-0.5 flex size-5 shrink-0 items-center justify-center rounded-full ${selectedInterviewer.accentBg}`}>
+                          <span className={`text-[8px] font-bold ${selectedInterviewer.accentColor}`}>{selectedInterviewer.initials}</span>
+                        </div>
+                        <div className="flex gap-1 pt-1">
+                          {[0, 1, 2].map((i) => (
+                            <motion.div
+                              key={i}
+                              className="size-1.5 rounded-full bg-white/30"
+                              animate={{ y: [0, -3, 0], opacity: [0.3, 0.8, 0.3] }}
+                              transition={{ duration: 0.6, repeat: Infinity, delay: i * 0.15 }}
+                            />
+                          ))}
+                        </div>
                       </div>
-                    </div>
-                  </motion.div>
-                )
-              }
-
-              return null
-            })}
+                    )}
+                    <div ref={messagesEndRef} />
+                  </div>
+                </div>
+              </motion.div>
+            )}
           </AnimatePresence>
+        </div>
 
-          {/* Typing indicator */}
-          {aiTyping && <TypingIndicator />}
-
-          <div ref={messagesEndRef} />
+        {/* ─── User Camera PiP ──────────────────────────────────────────── */}
+        <div className="absolute bottom-4 right-4 z-10 sm:bottom-6 sm:right-6">
+          <div className="overflow-hidden rounded-2xl border border-white/10 bg-black/40 shadow-lg" style={{ width: 120, height: 90 }}>
+            {cameraOn ? (
+              <video
+                ref={userVideoRef}
+                autoPlay
+                playsInline
+                muted
+                className="size-full object-cover"
+                style={{ transform: 'scaleX(-1)' }}
+              />
+            ) : (
+              <div className="flex size-full items-center justify-center bg-white/5">
+                <div className="flex size-10 items-center justify-center rounded-full bg-white/10">
+                  <svg className="size-5 text-white/30" fill="currentColor" viewBox="0 0 24 24">
+                    <path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z" />
+                  </svg>
+                </div>
+              </div>
+            )}
+          </div>
+          <p className="mt-1 text-center text-[9px] text-white/30">You</p>
         </div>
       </div>
 
-      {/* ─── Bottom Control Area ────────────────────────────────────────── */}
-      <div className="sticky bottom-0 border-t border-border/30 bg-background/95 px-4 pb-20 pt-3 backdrop-blur-md">
-
-        {/* Mode Toggle */}
-        <div className="mb-3 flex items-center justify-between">
-          <div className="flex items-center gap-1 rounded-xl bg-secondary/60 p-1">
-            <button
-              onClick={() => setInputMode('voice')}
-              className={`flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium transition-all ${
-                inputMode === 'voice'
-                  ? 'bg-teal-400/20 text-teal-400'
-                  : 'text-muted-foreground hover:text-foreground'
-              }`}
-            >
-              <Mic className="size-3" />
-              Voice
-            </button>
-            <button
-              onClick={() => { setInputMode('text'); stopRecording(); }}
-              className={`flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium transition-all ${
-                inputMode === 'text'
-                  ? 'bg-teal-400/20 text-teal-400'
-                  : 'text-muted-foreground hover:text-foreground'
-              }`}
-            >
-              <Keyboard className="size-3" />
-              Type
-            </button>
-          </div>
-
-          {isRecording && (
+      {/* ─── Text Input Area (shown when in text mode) ──────────────────── */}
+      <AnimatePresence>
+        {inputMode === 'text' && (
+          <motion.div
+            className="relative z-20 border-t border-white/10 bg-black/60 px-4 py-3 backdrop-blur-md"
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: 20 }}
+          >
             <div className="flex items-center gap-2">
-              <span className="recording-dot size-2 rounded-full bg-red-400" />
-              <RecordingTimer startTime={recordingStartTime} />
-              <span className="text-xs text-muted-foreground">/ 0:{MAX_RECORDING_SECONDS}</span>
+              <Input
+                ref={inputRef}
+                value={currentInput}
+                onChange={(e) => setCurrentInput(e.target.value)}
+                onKeyDown={handleKeyDown}
+                placeholder="Type your answer..."
+                disabled={isSending || aiTyping}
+                className="rounded-xl border-white/10 bg-white/5 py-3 text-sm text-white placeholder:text-white/30 focus:border-white/20"
+                aria-label="Type your interview answer"
+              />
+              <motion.div whileTap={{ scale: 0.9 }}>
+                <Button
+                  onClick={handleSendAnswer}
+                  disabled={!currentInput.trim() || isSending || aiTyping}
+                  size="icon"
+                  className={`size-11 rounded-xl ${selectedInterviewer.accentBg} ${selectedInterviewer.accentColor} hover:opacity-80 disabled:opacity-30`}
+                  aria-label="Send answer"
+                >
+                  <Send className="size-5" />
+                </Button>
+              </motion.div>
             </div>
-          )}
-        </div>
+            {charCount > 0 && (
+              <p className={`mt-1.5 text-[10px] ${charCount < 200 ? 'text-white/30' : charCount <= 500 ? 'text-teal-400/70' : 'text-yellow-400/70'}`}>
+                {charFeedback}
+              </p>
+            )}
+          </motion.div>
+        )}
+      </AnimatePresence>
 
-        {/* Voice Mode Controls */}
-        {inputMode === 'voice' ? (
-          <div className="flex items-center justify-center gap-4">
-            {/* Skip Button */}
-            <motion.button
-              onClick={handleSkipQuestion}
-              disabled={isSending || aiTyping || isTranscribing}
-              className="flex size-12 items-center justify-center rounded-xl bg-secondary/60 text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground disabled:opacity-30"
-              whileTap={{ scale: 0.9 }}
-              aria-label="Skip this question"
-            >
-              <SkipForward className="size-5" />
-            </motion.button>
+      {/* ─── Bottom Control Bar ──────────────────────────────────────────── */}
+      <div className="relative z-20 border-t border-white/10 bg-black/60 px-4 pb-8 pt-4 backdrop-blur-xl sm:pb-6">
+        {/* Recording indicator row */}
+        {isRecording && inputMode === 'voice' && (
+          <motion.div
+            className="mb-3 flex items-center justify-center gap-2"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+          >
+            <span className="size-2 animate-pulse rounded-full bg-red-500" />
+            <RecordingTimer startTime={recordingStartTime} />
+            <span className="text-[10px] text-white/30">/ 0:{MAX_RECORDING_SECONDS}</span>
+          </motion.div>
+        )}
 
-            {/* Main Mic Button */}
+        <div className="flex items-center justify-center gap-3 sm:gap-4">
+          {/* Camera Toggle */}
+          <motion.button
+            onClick={toggleCamera}
+            className={`relative flex size-11 items-center justify-center rounded-full transition-all sm:size-12 ${
+              cameraOn
+                ? 'bg-white/15 text-white hover:bg-white/20'
+                : 'bg-white/5 text-white/40 hover:bg-white/10 hover:text-white/60'
+            }`}
+            whileTap={{ scale: 0.9 }}
+            aria-label={cameraOn ? 'Turn off camera' : 'Turn on camera'}
+          >
+            {cameraOn ? <Video className="size-5" /> : <VideoOff className="size-5" />}
+            {cameraOn && <span className="absolute -right-0.5 -top-0.5 size-2.5 rounded-full bg-green-400" />}
+          </motion.button>
+
+          {/* Mute AI Toggle */}
+          <motion.button
+            onClick={() => setIsMuted(!isMuted)}
+            className={`flex size-11 items-center justify-center rounded-full transition-all sm:size-12 ${
+              isMuted
+                ? 'bg-red-500/20 text-red-400 hover:bg-red-500/30'
+                : 'bg-white/10 text-white/70 hover:bg-white/15 hover:text-white'
+            }`}
+            whileTap={{ scale: 0.9 }}
+            aria-label={isMuted ? 'Unmute AI speaker' : 'Mute AI speaker'}
+          >
+            {isMuted ? <VolumeX className="size-5" /> : <Volume2 className="size-5" />}
+          </motion.button>
+
+          {/* Main Mic Button (Voice mode) or Input Mode Switch (Text mode) */}
+          {inputMode === 'voice' ? (
             <motion.button
               onClick={handleMicPress}
               disabled={isSending || aiTyping || isTranscribing || isAiSpeaking}
-              className={`relative flex size-20 items-center justify-center rounded-full transition-all ${
+              className={`relative flex size-16 items-center justify-center rounded-full transition-all sm:size-20 ${
                 isRecording
-                  ? 'bg-red-500 text-white shadow-lg shadow-red-500/30'
+                  ? 'bg-red-500 text-white shadow-lg shadow-red-500/40'
                   : isTranscribing
                     ? 'bg-purple-500/80 text-white'
-                    : 'bg-teal-500 text-white shadow-lg shadow-teal-500/20 hover:bg-teal-400'
+                    : `bg-white text-black shadow-lg shadow-white/20 hover:bg-white/90`
               } disabled:opacity-30 disabled:shadow-none`}
               whileTap={{ scale: 0.92 }}
               aria-label={isRecording ? 'Stop recording' : 'Start recording'}
@@ -2438,96 +2597,73 @@ export default function InterviewCoach() {
                 <>
                   <motion.div
                     className="absolute inset-0 rounded-full border-2 border-red-400/40"
-                    animate={{ scale: [1, 1.5, 1], opacity: [0.5, 0, 0.5] }}
+                    animate={{ scale: [1, 1.4, 1], opacity: [0.5, 0, 0.5] }}
                     transition={{ duration: 1.5, repeat: Infinity }}
                   />
                   <motion.div
                     className="absolute inset-0 rounded-full border-2 border-red-400/20"
-                    animate={{ scale: [1, 2, 1], opacity: [0.3, 0, 0.3] }}
+                    animate={{ scale: [1, 1.8, 1], opacity: [0.3, 0, 0.3] }}
                     transition={{ duration: 1.5, repeat: Infinity, delay: 0.3 }}
                   />
                 </>
               )}
-
-              {/* Transcribing spinner */}
               {isTranscribing ? (
                 <motion.div
                   animate={{ rotate: 360 }}
                   transition={{ duration: 1, repeat: Infinity, ease: 'linear' }}
                 >
-                  <Mic className="size-8" />
+                  <Mic className="size-7 sm:size-8" />
                 </motion.div>
               ) : isRecording ? (
-                <div className="flex flex-col items-center gap-1">
-                  <MicOff className="size-7" />
-                  <VoiceWaveVisualizer isActive={isRecording} />
-                </div>
+                <MicOff className="size-7 sm:size-8" />
               ) : (
-                <Mic className="size-8" />
+                <Mic className="size-7 sm:size-8" />
               )}
             </motion.button>
-
-            {/* Mute/Speaker Toggle — controls whether AI auto-speaks */}
+          ) : (
             <motion.button
-              onClick={() => setIsMuted(!isMuted)}
-              className={`flex size-12 items-center justify-center rounded-xl transition-colors ${
-                isMuted
-                  ? 'bg-red-500/15 text-red-400'
-                  : 'bg-secondary/60 text-muted-foreground hover:bg-secondary hover:text-foreground'
-              }`}
-              whileTap={{ scale: 0.9 }}
-              aria-label={isMuted ? 'Unmute AI speaker' : 'Mute AI speaker'}
+              onClick={() => setInputMode('voice')}
+              className="flex size-16 items-center justify-center rounded-full bg-white text-black shadow-lg shadow-white/20 transition-all hover:bg-white/90 sm:size-20"
+              whileTap={{ scale: 0.92 }}
+              aria-label="Switch to voice mode"
             >
-              {isMuted ? <VolumeX className="size-5" /> : <Volume2 className="size-5" />}
+              <Mic className="size-7 sm:size-8" />
             </motion.button>
-          </div>
-        ) : (
-          /* Text Mode Controls */
-          <div className="flex items-center gap-2">
-            <div className="relative flex-1">
-              <Input
-                ref={inputRef}
-                value={currentInput}
-                onChange={(e) => setCurrentInput(e.target.value)}
-                onKeyDown={handleKeyDown}
-                placeholder="Type your answer..."
-                disabled={isSending || aiTyping}
-                className="rounded-xl border-border bg-secondary py-3 pr-4 pl-4 text-sm placeholder:text-muted-foreground/50 focus:border-primary"
-                aria-label="Type your interview answer"
-              />
-            </div>
+          )}
 
-            <motion.div whileTap={{ scale: 0.9 }}>
-              <Button
-                onClick={handleSendAnswer}
-                disabled={!currentInput.trim() || isSending || aiTyping}
-                size="icon"
-                className="size-12 rounded-xl bg-teal-500 text-white hover:bg-teal-400 disabled:opacity-40"
-                aria-label="Send answer"
-              >
-                <Send className="size-5" />
-              </Button>
-            </motion.div>
+          {/* Skip Question */}
+          <motion.button
+            onClick={handleSkipQuestion}
+            disabled={isSending || aiTyping || isTranscribing}
+            className="flex size-11 items-center justify-center rounded-full bg-white/5 text-white/40 transition-all hover:bg-white/10 hover:text-white/60 disabled:opacity-20 sm:size-12"
+            whileTap={{ scale: 0.9 }}
+            aria-label="Skip this question"
+          >
+            <SkipForward className="size-5" />
+          </motion.button>
 
-            <motion.div whileTap={{ scale: 0.9 }}>
-              <Button
-                onClick={handleSkipQuestion}
-                disabled={isSending || aiTyping}
-                variant="ghost"
-                size="icon"
-                className="size-12 rounded-xl text-muted-foreground hover:bg-secondary hover:text-foreground"
-                aria-label="Skip this question"
-              >
-                <SkipForward className="size-5" />
-              </Button>
-            </motion.div>
-          </div>
-        )}
+          {/* Switch Input Mode (small) */}
+          <motion.button
+            onClick={() => {
+              if (inputMode === 'voice') {
+                setInputMode('text')
+                stopRecording()
+              } else {
+                setInputMode('voice')
+              }
+            }}
+            className="flex size-11 items-center justify-center rounded-full bg-white/5 text-white/40 transition-all hover:bg-white/10 hover:text-white/60 sm:size-12"
+            whileTap={{ scale: 0.9 }}
+            aria-label={inputMode === 'voice' ? 'Switch to text input' : 'Switch to voice input'}
+          >
+            {inputMode === 'voice' ? <Keyboard className="size-5" /> : <MessageCircle className="size-5" />}
+          </motion.button>
+        </div>
 
-        {/* Voice Mode Hint */}
+        {/* Hint text */}
         {inputMode === 'voice' && !isRecording && !isTranscribing && !isAiSpeaking && (
           <motion.p
-            className="mt-2 text-center text-[11px] text-muted-foreground"
+            className="mt-2 text-center text-[10px] text-white/25"
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             transition={{ delay: 0.5 }}
@@ -2535,21 +2671,13 @@ export default function InterviewCoach() {
             Tap the microphone to speak your answer
           </motion.p>
         )}
-
-        {/* Character counter for text mode */}
-        {inputMode === 'text' && charCount > 0 && (
+        {isRecording && inputMode === 'voice' && (
           <motion.p
-            className={`mt-2 text-[11px] ${
-              charCount < 200
-                ? 'text-muted-foreground'
-                : charCount <= 500
-                  ? 'text-teal-400'
-                  : 'text-yellow-400'
-            }`}
+            className="mt-2 text-center text-[10px] text-red-400/70"
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
           >
-            {charFeedback}
+            Recording... tap again to stop
           </motion.p>
         )}
       </div>
@@ -2558,14 +2686,14 @@ export default function InterviewCoach() {
       <AnimatePresence>
         {showEndConfirm && (
           <motion.div
-            className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 px-6 backdrop-blur-sm"
+            className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 px-6 backdrop-blur-sm"
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
             onClick={() => setShowEndConfirm(false)}
           >
             <motion.div
-              className="w-full max-w-sm overflow-hidden rounded-3xl border border-border/30 bg-background shadow-2xl"
+              className="w-full max-w-sm overflow-hidden rounded-3xl border border-white/10 bg-neutral-900 shadow-2xl"
               initial={{ scale: 0.9, opacity: 0 }}
               animate={{ scale: 1, opacity: 1 }}
               exit={{ scale: 0.9, opacity: 0 }}
@@ -2577,8 +2705,8 @@ export default function InterviewCoach() {
                 <div className="flex size-16 items-center justify-center rounded-full bg-red-500/15">
                   <PhoneOff className="size-7 text-red-400" />
                 </div>
-                <h3 className="text-lg font-bold text-foreground">End Interview?</h3>
-                <p className="text-center text-sm text-muted-foreground">
+                <h3 className="text-lg font-bold text-white">End Interview?</h3>
+                <p className="text-center text-sm text-white/60">
                   {currentQuestionNum > 1
                     ? `You've answered ${currentQuestionNum - 1} of ${questionCount} questions. You'll still get your scores for the answers you've given.`
                     : "You haven't answered any questions yet. You'll get a chance to restart after ending."}
@@ -2600,7 +2728,7 @@ export default function InterviewCoach() {
                 </motion.button>
                 <motion.button
                   onClick={() => setShowEndConfirm(false)}
-                  className="flex w-full items-center justify-center gap-2 rounded-2xl border border-border/50 bg-secondary/40 px-4 py-3 text-sm font-medium text-foreground/80 transition-colors hover:bg-secondary/60 active:scale-[0.98]"
+                  className="flex w-full items-center justify-center gap-2 rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm font-medium text-white/70 transition-colors hover:bg-white/10 active:scale-[0.98]"
                   whileTap={{ scale: 0.98 }}
                 >
                   Continue Interview
