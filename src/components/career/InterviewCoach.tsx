@@ -103,6 +103,8 @@ interface InterviewerProfile {
   title: string
   description: string
   voice: string
+  speed: number
+  volume: number
   accentColor: string
   accentBg: string
   accentBorder: string
@@ -116,27 +118,31 @@ const INTERVIEWERS: InterviewerProfile[] = [
     id: 'kazi',
     name: 'Kazi',
     title: 'The Coach',
-    description: 'Supportive and clear. Perfect for building confidence with encouraging feedback.',
-    voice: 'kazi',
+    description: 'Warm and natural. The most human-sounding coach for building real confidence.',
+    voice: 'douji',
+    speed: 1.2,
+    volume: 1.8,
     accentColor: 'text-teal-400',
     accentBg: 'bg-teal-400/15',
     accentBorder: 'border-teal-400/60',
     avatarGradient: 'from-teal-400 to-cyan-400',
     initials: 'KZ',
-    personality: 'You are Kazi, a supportive and encouraging interview coach. You ask clear questions, give warm and constructive feedback, and celebrate improvements. You speak in a friendly, approachable tone while maintaining professionalism. You often add words of encouragement like "Great start!" or "You\'re making good progress!"',
+    personality: 'You are Kazi, a supportive and encouraging interview coach who sounds like a real person, not a robot. You speak naturally, using contractions and occasional filler words like "Hmm" and "Right". You ask clear questions, give warm and constructive feedback in a conversational way, and celebrate improvements. You often add words of encouragement like "Great start!" or "You\'re making good progress!" Keep your spoken responses concise — 2-3 short sentences of feedback, then ask the next question.',
   },
   {
     id: 'thabo',
     name: 'Thabo',
     title: 'The Corporate',
-    description: 'Professional and direct. Challenges you with tough, realistic corporate questions.',
+    description: 'Professional and measured. A deep, calm voice for realistic corporate interviews.',
     voice: 'xiaochen',
+    speed: 1.1,
+    volume: 1.5,
     accentColor: 'text-slate-300',
     accentBg: 'bg-slate-400/15',
     accentBorder: 'border-slate-400/60',
     avatarGradient: 'from-slate-300 to-slate-500',
     initials: 'TH',
-    personality: 'You are Thabo, a senior corporate HR director. You ask sharp, probing questions that challenge candidates to think deeply. You give direct, no-nonsense feedback focused on professionalism and business impact. You maintain a formal, business-like tone and expect structured, concise answers.',
+    personality: 'You are Thabo, a senior corporate HR director who speaks with authority and deliberation. You use measured, professional language with occasional phrases like "I see" and "Let me push back on that." You ask sharp, probing questions that challenge candidates to think deeply. You give direct, no-nonsense feedback focused on professionalism and business impact. Keep your spoken responses concise — 2-3 short sentences of feedback, then ask the next question.',
   },
   {
     id: 'naledi',
@@ -144,38 +150,44 @@ const INTERVIEWERS: InterviewerProfile[] = [
     title: 'The Friendly',
     description: 'Warm and conversational. Makes interviews feel like a relaxed chat over coffee.',
     voice: 'tongtong',
+    speed: 1.15,
+    volume: 1.8,
     accentColor: 'text-amber-400',
     accentBg: 'bg-amber-400/15',
     accentBorder: 'border-amber-400/60',
     avatarGradient: 'from-amber-400 to-orange-400',
     initials: 'NL',
-    personality: 'You are Naledi, a warm and friendly interviewer who puts candidates at ease. You ask questions in a conversational, story-telling way. Your feedback is gentle and supportive, like a mentor who genuinely cares. You often share relatable examples and use phrases like "Tell me about a time..." or "I\'d love to hear about..."',
+    personality: 'You are Naledi, a warm and friendly interviewer who puts candidates at ease with your natural, flowing conversation style. You use phrases like "Oh, that\'s interesting!" and "Tell me more about that..." You ask questions in a conversational, story-telling way. Your feedback is gentle and supportive, like a mentor who genuinely cares. Keep your spoken responses concise — 2-3 short sentences of feedback, then ask the next question naturally.',
   },
   {
     id: 'james',
     name: 'James',
     title: 'The Executive',
-    description: 'Formal and demanding. Prepare for tough executive-level interview questions.',
+    description: 'Sharp and commanding. A British-accented voice for high-stakes executive interviews.',
     voice: 'jam',
+    speed: 1.25,
+    volume: 2.2,
     accentColor: 'text-violet-400',
     accentBg: 'bg-violet-400/15',
     accentBorder: 'border-violet-400/60',
     avatarGradient: 'from-violet-400 to-purple-500',
     initials: 'JM',
-    personality: 'You are James, a seasoned C-suite executive who conducts high-stakes interviews. You ask demanding, strategic questions that test leadership thinking. Your feedback is crisp, analytical, and focused on executive presence. You expect candidates to demonstrate vision, decisiveness, and business acumen.',
+    personality: 'You are James, a seasoned C-suite executive with a British accent who conducts high-stakes interviews with crisp authority. You use phrases like "Quite" and "I\'d challenge you on that." You ask demanding, strategic questions that test leadership thinking. Your feedback is analytical and focused on executive presence. Keep your spoken responses concise and commanding — 1-2 sharp sentences of feedback, then directly ask the next question.',
   },
   {
     id: 'zanele',
     name: 'Zanele',
     title: 'The Motivator',
-    description: 'Energetic and passionate. Pushes you to bring your absolute best to every answer.',
+    description: 'Energetic and expressive. A passionate voice that fires you up to do your best.',
     voice: 'luodo',
+    speed: 1.3,
+    volume: 2.5,
     accentColor: 'text-rose-400',
     accentBg: 'bg-rose-400/15',
     accentBorder: 'border-rose-400/60',
     avatarGradient: 'from-rose-400 to-pink-500',
     initials: 'ZN',
-    personality: 'You are Zanele, a passionate and energetic career coach who brings fire to every interview. You push candidates to dig deeper and aim higher. Your feedback is enthusiastic and action-oriented. You use powerful, motivating language like "You have so much potential!" and "Let\'s take this to the next level!"',
+    personality: 'You are Zanele, a passionate and energetic career coach who speaks with fire and conviction! You use powerful phrases like "I love that!" and "Now we\'re talking!" and "You\'ve got so much potential!" You push candidates to dig deeper and aim higher. Your feedback is enthusiastic and action-oriented. Keep your spoken responses punchy and high-energy — 2 short sentences of feedback with excitement, then fire the next question!',
   },
 ]
 
@@ -573,7 +585,7 @@ export default function InterviewCoach() {
   const [isAiSpeaking, setIsAiSpeaking] = useState(false)
   const [isTranscribing, setIsTranscribing] = useState(false)
   const [micPermission, setMicPermission] = useState<PermissionState | 'unknown'>('unknown')
-  const [showMuted, setShowMuted] = useState(false)
+  const [isMuted, setIsMuted] = useState(false)
   const [interviewDuration, setInterviewDuration] = useState(0)
 
   // Interviewer state
@@ -669,6 +681,9 @@ export default function InterviewCoach() {
   // ─── Play TTS Audio ──────────────────────────────────────────────────
 
   const playTTS = useCallback(async (text: string): Promise<void> => {
+    // If user has muted the AI, skip TTS playback but continue the conversation
+    if (isMuted) return
+
     try {
       setIsAiSpeaking(true)
 
@@ -681,7 +696,12 @@ export default function InterviewCoach() {
       const res = await fetch('/api/ai/tts', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ text, voice: selectedInterviewer.voice, speed: 1.0 }),
+        body: JSON.stringify({
+          text,
+          voice: selectedInterviewer.voice,
+          speed: selectedInterviewer.speed,
+          volume: selectedInterviewer.volume,
+        }),
       })
 
       if (!res.ok) {
@@ -727,7 +747,7 @@ export default function InterviewCoach() {
       console.error('TTS playback error:', error)
       setIsAiSpeaking(false)
     }
-  }, [selectedInterviewer])
+  }, [selectedInterviewer, isMuted])
 
   // ─── Stop TTS Audio ──────────────────────────────────────────────────
 
@@ -929,10 +949,10 @@ export default function InterviewCoach() {
         }
         setMessages([welcomeMsg])
 
-        // Auto-speak the first question
+        // Auto-speak the first question — minimal delay for responsiveness
         setTimeout(() => {
           playTTS(data.question)
-        }, 500)
+        }, 200)
 
         // Create session in store
         setInterviewSession({
@@ -958,7 +978,7 @@ export default function InterviewCoach() {
         timestamp: Date.now(),
       }
       setMessages([errorMsg])
-      setTimeout(() => playTTS(errorMsg.content), 500)
+      setTimeout(() => playTTS(errorMsg.content), 200)
     } finally {
       setIsLoading(false)
       setAiTyping(false)
@@ -995,6 +1015,12 @@ export default function InterviewCoach() {
       // Use a ref for currentQuestionNum to avoid stale closures
       const questionNum = currentQuestionNum
 
+      // Build conversation history for context continuity
+      const conversationHistory = messages.slice(-10).map((msg) => ({
+        role: msg.role === 'feedback' ? 'ai' as const : msg.role as 'ai' | 'user',
+        content: msg.content,
+      }))
+
       const res = await fetch('/api/ai/interview', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -1006,6 +1032,7 @@ export default function InterviewCoach() {
           totalQuestions: questionCount,
           interviewerPersonality: selectedInterviewer.personality,
           interviewerName: selectedInterviewer.name,
+          conversationHistory,
         }),
       })
 
@@ -1025,11 +1052,13 @@ export default function InterviewCoach() {
           }
         })
 
-        // Add feedback message
+        // The feedback from the API is now conversational (spokenText format)
+        // It already includes the reaction + brief feedback, so we use it directly
+        const feedbackText = data.feedback || 'Good point.'
         const feedbackMsg: ChatMessage = {
           id: `feedback-${Date.now()}`,
           role: 'feedback',
-          content: data.feedback || 'Good effort! Keep going.',
+          content: feedbackText,
           timestamp: Date.now(),
           scores,
         }
@@ -1038,16 +1067,17 @@ export default function InterviewCoach() {
         // Check if interview is complete
         if (data.isComplete || questionNum >= questionCount) {
           // Interview complete - add closing message
+          const closingContent = data.closingMessage || "Great job completing the interview! You've shown real effort. Let me compile your results..."
           const closingMsg: ChatMessage = {
             id: `ai-closing-${Date.now()}`,
             role: 'ai',
-            content: data.closingMessage || "Great job completing the interview! You've shown real effort. Let me compile your results...",
+            content: closingContent,
             timestamp: Date.now(),
           }
           setMessages((prev) => [...prev, closingMsg])
 
-          // Speak closing message
-          setTimeout(() => playTTS(closingMsg.content), 800)
+          // Speak closing message immediately
+          playTTS(closingContent)
 
           // Calculate final scores from the updated live scores
           // The live scores have already been updated above, so use functional state
@@ -1086,7 +1116,7 @@ export default function InterviewCoach() {
             return currentLiveScores // Don't modify — just read for final calculation
           })
         } else {
-          // Add next question and speak it
+          // Add next question and speak it — reduced delay for natural feel
           isWaitingForNextQuestion = true
           setTimeout(() => {
             const nextQuestion = data.nextQuestion || 'Can you tell me more about your experience?'
@@ -1101,9 +1131,9 @@ export default function InterviewCoach() {
             setAiTyping(false)
             setIsSending(false)
 
-            // Auto-speak the next question
-            setTimeout(() => playTTS(nextQuestion), 300)
-          }, 800)
+            // Auto-speak the next question immediately
+            playTTS(nextQuestion)
+          }, 200)
           return
         }
       }
@@ -1116,7 +1146,7 @@ export default function InterviewCoach() {
         timestamp: Date.now(),
       }
       setMessages((prev) => [...prev, errorMsg])
-      setTimeout(() => playTTS(errorMsg.content), 500)
+      playTTS(errorMsg.content)
     } finally {
       // Only clear loading states if we're NOT waiting for the next question timeout
       // (the timeout callback will handle clearing them)
@@ -1209,8 +1239,8 @@ export default function InterviewCoach() {
             }
             setMessages((prev) => [...prev, nextMsg])
             setCurrentQuestionNum((prev) => prev + 1)
-            setTimeout(() => playTTS(data.question), 300)
-          }, 500)
+            playTTS(data.question)
+          }, 200)
         }
       } catch {
         const nextMsg: ChatMessage = {
@@ -2269,18 +2299,18 @@ export default function InterviewCoach() {
               )}
             </motion.button>
 
-            {/* Mute/Speaker Toggle */}
+            {/* Mute/Speaker Toggle — controls whether AI auto-speaks */}
             <motion.button
-              onClick={() => setShowMuted(!showMuted)}
+              onClick={() => setIsMuted(!isMuted)}
               className={`flex size-12 items-center justify-center rounded-xl transition-colors ${
-                showMuted
+                isMuted
                   ? 'bg-red-500/15 text-red-400'
                   : 'bg-secondary/60 text-muted-foreground hover:bg-secondary hover:text-foreground'
               }`}
               whileTap={{ scale: 0.9 }}
-              aria-label={showMuted ? 'Unmute AI speaker' : 'Mute AI speaker'}
+              aria-label={isMuted ? 'Unmute AI speaker' : 'Mute AI speaker'}
             >
-              {showMuted ? <VolumeX className="size-5" /> : <Volume2 className="size-5" />}
+              {isMuted ? <VolumeX className="size-5" /> : <Volume2 className="size-5" />}
             </motion.button>
           </div>
         ) : (

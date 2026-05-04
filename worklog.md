@@ -295,3 +295,78 @@ Stage Summary:
 - Interview chat UI dynamically uses selected interviewer's accent colors and avatar
 - AI LLM adopts interviewer personality through system prompt instructions
 - Audio context properly cleaned up on interview reset
+
+---
+Task ID: 13
+Agent: Main Orchestrator
+Task: Improve voice naturalness, distinctness, and conversation flow in Interview Coach
+
+Work Log:
+- **TTS Route Improvements** (`/api/ai/tts/route.ts`):
+  - Added `volume` parameter support (range 0.1-10.0, default 1.5)
+  - Added `preprocessTextForTTS()` function that cleans text before TTS:
+    - Strips JSON artifacts and markdown formatting
+    - Removes emojis that TTS engines stumble on
+    - Expands abbreviations (HR→H R, CEO→C E O, CV→C V, etc.)
+    - Ensures text ends with sentence-ending punctuation for natural pauses
+  - Changed default speed from 1.0 to 1.2 for more conversational pace
+  - Updated voice type to include all 7 SDK voices: tongtong, chuichui, xiaochen, jam, kazi, douji, luodo
+  - Added `as any` type assertion for `volume` parameter (not in SDK type definitions but API supports it)
+
+- **Interview Route Improvements** (`/api/ai/interview/route.ts`):
+  - Added `conversationHistory` parameter — passes last 10 messages for context continuity
+  - LLM now has memory of previous exchanges (previously each request was stateless)
+  - Completely rewrote system prompts to enforce natural, human-like conversation:
+    - "Speak naturally, like a real human interviewer — NOT like a robot reading a script"
+    - Use conversational fillers: "Hmm", "I see", "That's interesting", "Right", "Okay"
+    - Use contractions naturally: "you're", "that's", "I'd", "let's"
+    - Show genuine reactions before giving feedback
+    - Keep feedback concise (2-3 short sentences)
+    - Vary sentence structure — don't always start with "Great" or "Good"
+  - New JSON response format with `spokenText` field — what the AI actually says, written conversationally
+  - Fallback responses also made more natural
+
+- **InterviewCoach Component Improvements**:
+  - Updated `InterviewerProfile` interface — added `speed` and `volume` fields
+  - Changed Kazi's voice from `kazi` to `douji` (自然流畅 = natural and smooth, most human-sounding voice)
+  - Updated all interviewer descriptions to highlight voice character:
+    - Kazi: "Warm and natural. The most human-sounding coach"
+    - Thabo: "Professional and measured. A deep, calm voice"
+    - Naledi: "Warm and conversational"
+    - James: "Sharp and commanding. A British-accented voice"
+    - Zanele: "Energetic and expressive. A passionate voice"
+  - Set per-persona speed and volume for maximum distinctness:
+    - Kazi: speed 1.2, volume 1.8 (warm, moderate)
+    - Thabo: speed 1.1, volume 1.5 (measured, professional)
+    - Naledi: speed 1.15, volume 1.8 (friendly, warm)
+    - James: speed 1.25, volume 2.2 (crisp, commanding, louder)
+    - Zanele: speed 1.3, volume 2.5 (energetic, fast, loud)
+  - Updated personality descriptions to include natural speech patterns:
+    - Kazi: "use contractions and occasional filler words like Hmm and Right"
+    - Thabo: "use phrases like I see and Let me push back on that"
+    - Naledi: "use phrases like Oh, that's interesting! and Tell me more about that"
+    - James: "use phrases like Quite and I'd challenge you on that"
+    - Zanele: "use phrases like I love that! and Now we're talking!"
+  - Updated `playTTS` to pass `speed` and `volume` from interviewer profile
+  - Made mute button functional — `isMuted` state now actually skips TTS playback
+  - Added conversation history to `sendAnswer` API call (last 10 messages)
+  - Reduced all artificial delays for faster, more natural conversation:
+    - Initial TTS after interview start: 500ms → 200ms
+    - Post-evaluate next question: 800ms → 200ms
+    - TTS before next question: 300ms → immediate (0ms)
+    - Error fallback TTS: 500ms → immediate
+    - Closing message TTS: 800ms → immediate
+  - Updated feedback handling to use conversational `spokenText` format from new interview API
+
+- **ASR Route Fix** (`/api/ai/asr/route.ts`):
+  - Added `as any` type assertion for `format` parameter (pre-existing TS error)
+
+Stage Summary:
+- Voices now sound more distinct: douji (natural), xiaochen (calm), tongtong (warm), jam (British), luodo (expressive)
+- Per-persona speed/volume makes each interviewer sound noticeably different
+- Text preprocessing removes robotic artifacts from TTS input
+- Conversation history gives the LLM memory of prior exchanges
+- Natural language prompts produce human-like responses with fillers and contractions
+- Reduced delays make the conversation feel responsive and real-time
+- Mute button now actually works (previous `showMuted` was non-functional)
+- All API endpoints tested and verified working

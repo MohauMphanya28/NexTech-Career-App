@@ -28,7 +28,7 @@ export async function POST(req: NextRequest) {
       const response = await zai.audio.asr.create({
         file_base64: base64Data,
         format: 'wav',
-      })
+      } as any)
 
       const transcription = response.text || ''
 
