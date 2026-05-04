@@ -656,3 +656,39 @@ Stage Summary:
 - PDF/DOCX/TXT extraction endpoints functional
 - Service stays alive in background using subshell backgrounding pattern
 - Resume analyzer API route can now successfully call the extraction service
+
+---
+Task ID: 20
+Agent: Main Orchestrator
+Task: Fix interview results appearing before interviewer speaks final feedback
+
+Work Log:
+- **Problem**: After the last answer, results screen appeared immediately (2.5s timer) while the interviewer was still speaking closing feedback. The `playTTS()` call was fire-and-forget, so the timeout raced ahead of audio playback.
+- **Solution**: Added `playTTSAndWait()` — a variant of `playTTS` that returns a Promise which resolves when the audio finishes playing (or on error/timeout).
+- **Implementation**:
+  - Added `playTTSAndWait(text, timeoutMs)` function (lines 967-1026):
+    - Calls `playTTS()` internally (reuses all existing TTS logic including cache)
+    - Polls `currentAudioRef` to detect when audio element is created
+    - Patches `onended`/`onerror` handlers to also resolve the Promise
+    - Safety timeout of 15s (8s for early-end) ensures the app never gets stuck
+    - If muted, resolves immediately (no audio to wait for)
+  - Updated interview completion flow (lines 1368-1422):
+    - Replaced `playTTS(closingContent)` + `setTimeout(2500)` with `Promise.all([minDelay, playTTSAndWait(closingContent)])`
+    - Results screen now waits for BOTH: minimum 2.5s delay AND audio completion
+    - If TTS fails or is muted, the 2.5s minimum still applies
+  - Updated `handleEndInterview` (lines 1569-1618):
+    - Now speaks a closing line ("No worries, we can stop here. Let me compile your results.") before showing results
+    - Uses `playTTSAndWait` with 8s timeout + 2s minimum delay
+    - Added closing message to chat for visual continuity
+    - Wrapped in `useCallback` with proper dependency array
+  - Updated `handleSkipQuestion` last-question path (lines 1502-1533):
+    - Now speaks "Alright, that wraps up our session. Let me pull together your results." before results
+    - Same `playTTSAndWait` pattern as other completion paths
+  - Added `playTTSAndWait` to `sendAnswer` useCallback dependency array
+
+Stage Summary:
+- Interviewer always speaks final feedback before results screen appears
+- Three completion paths all updated: normal completion, early end, and skip-on-last-question
+- `playTTSAndWait` provides reliable audio-completion detection with safety timeout
+- Minimum delay ensures smooth visual transition even if TTS is very fast
+- No more jarring cut-off of the interviewer's closing words

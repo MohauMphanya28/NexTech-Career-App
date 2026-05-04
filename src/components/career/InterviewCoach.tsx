@@ -964,6 +964,67 @@ export default function InterviewCoach() {
     setIsAiBuffering(false)
   }, [])
 
+  // ─── Play TTS and Wait for Completion ──────────────────────────────────
+  // Returns a Promise that resolves when the audio finishes playing.
+  // Used for closing feedback so results screen only shows after the
+  // interviewer finishes speaking. Includes a safety timeout so the
+  // app never gets stuck if audio fails.
+
+  const playTTSAndWait = useCallback(async (text: string, timeoutMs = 15000): Promise<void> => {
+    // If muted, resolve immediately — no audio to wait for
+    if (isMutedRef.current) return
+
+    return new Promise<void>((resolve) => {
+      let resolved = false
+      const done = () => {
+        if (!resolved) {
+          resolved = true
+          resolve()
+        }
+      }
+
+      // Safety timeout — resolve even if audio never ends (e.g., TTS failure)
+      const safetyTimer = setTimeout(done, timeoutMs)
+
+      // Temporarily patch the current audio's onended/onerror to also resolve
+      // We call playTTS (which sets its own handlers), then override them.
+      playTTS(text).then(() => {
+        // playTTS is fire-and-forget — audio is now playing or buffering.
+        // Poll for the currentAudioRef to be set, then attach our done callback.
+        const checkAudio = setInterval(() => {
+          if (currentAudioRef.current) {
+            clearInterval(checkAudio)
+            const audio = currentAudioRef.current
+            const origOnended = audio.onended
+            const origOnerror = audio.onerror
+            audio.onended = () => {
+              clearTimeout(safetyTimer)
+              origOnended?.call(audio)
+              done()
+            }
+            audio.onerror = () => {
+              clearTimeout(safetyTimer)
+              origOnerror?.call(audio)
+              done()
+            }
+          }
+        }, 100)
+        // Also poll for the case where playTTS returns early (muted, error, etc.)
+        setTimeout(() => {
+          clearInterval(checkAudio)
+          // If no audio was ever set (e.g., muted mid-flight), just resolve
+          if (!currentAudioRef.current) {
+            clearTimeout(safetyTimer)
+            done()
+          }
+        }, 3000)
+      }).catch(() => {
+        clearTimeout(safetyTimer)
+        done()
+      })
+    })
+  }, [playTTS])
+
   // ─── Replay AI Message Audio ─────────────────────────────────────────
 
   const handleReplayAudio = useCallback((msg: ChatMessage) => {
@@ -1316,9 +1377,6 @@ export default function InterviewCoach() {
           }
           setMessages((prev) => [...prev, closingMsg])
 
-          // Speak closing message (non-blocking)
-          playTTS(closingContent)
-
           // Calculate final scores from the updated live scores
           // The live scores have already been updated above, so use functional state
           setLiveScores((currentLiveScores) => {
@@ -1326,15 +1384,22 @@ export default function InterviewCoach() {
               ((currentLiveScores.relevance + currentLiveScores.clarity + currentLiveScores.confidence) / 3) * 10
             ) / 10
 
-            // Delay showing results for dramatic effect
-            setTimeout(() => {
-              const sessionResults: SessionResults = {
-                overallScore,
-                ...currentLiveScores,
-                feedbackSummary: data.closingMessage || 'You completed the interview with solid effort. Keep practicing to improve your scores!',
-                improvementTips: generateImprovementTips(currentLiveScores),
-                closingMessage: data.closingMessage || '',
-              }
+            // Speak closing message and WAIT for it to finish before showing results.
+            // This ensures the interviewer provides their final feedback before the
+            // results screen appears. Falls back to a 2.5s minimum delay if TTS fails.
+            const sessionResults: SessionResults = {
+              overallScore,
+              ...currentLiveScores,
+              feedbackSummary: data.closingMessage || 'You completed the interview with solid effort. Keep practicing to improve your scores!',
+              improvementTips: generateImprovementTips(currentLiveScores),
+              closingMessage: data.closingMessage || '',
+            }
+
+            // Play closing audio and wait for it to finish, then show results
+            const minDelay = new Promise<void>((r) => setTimeout(r, 2500))
+            const ttsDone = playTTSAndWait(closingContent)
+
+            Promise.all([minDelay, ttsDone]).finally(() => {
               setResults(sessionResults)
               setMode('results')
 
@@ -1351,7 +1416,7 @@ export default function InterviewCoach() {
                 setInterviewSession(completedSession)
                 setInterviewHistory([...interviewHistory, completedSession])
               }
-            }, 2500)
+            })
 
             return currentLiveScores // Don't modify — just read for final calculation
           })
@@ -1394,7 +1459,7 @@ export default function InterviewCoach() {
         setIsSending(false)
       }
     }
-  }, [currentQuestionNum, selectedIndustry, questionCount, interviewSession, interviewHistory, playTTS, stopTTS, setInterviewSession, setInterviewHistory, setAiTyping, setIsLoading])
+  }, [currentQuestionNum, selectedIndustry, questionCount, interviewSession, interviewHistory, playTTS, playTTSAndWait, stopTTS, setInterviewSession, setInterviewHistory, setAiTyping, setIsLoading])
 
   // Keep the ref updated with the latest sendAnswer to avoid stale closures
   useEffect(() => {
@@ -1448,8 +1513,24 @@ export default function InterviewCoach() {
         improvementTips: ['Try to answer every question, even briefly', 'Practice answering under time pressure', 'Review common interview questions in your industry'],
         closingMessage: 'Interview completed. Keep practicing!',
       }
-      setResults(sessionResults)
-      setMode('results')
+
+      // Speak a brief closing line before showing results
+      const closingLine = "Alright, that wraps up our session. Let me pull together your results."
+      const closingMsg: ChatMessage = {
+        id: `ai-skip-end-${Date.now()}`,
+        role: 'ai',
+        content: closingLine,
+        timestamp: Date.now(),
+      }
+      setMessages((prev) => [...prev, closingMsg])
+
+      const minDelay = new Promise<void>((r) => setTimeout(r, 2000))
+      const ttsDone = playTTSAndWait(closingLine, 8000)
+
+      Promise.all([minDelay, ttsDone]).finally(() => {
+        setResults(sessionResults)
+        setMode('results')
+      })
     } else {
       // Ask next question via API
       setIsSending(true)
@@ -1501,7 +1582,7 @@ export default function InterviewCoach() {
 
   // ─── End Interview Early ─────────────────────────────────────────────
 
-  const handleEndInterview = () => {
+  const handleEndInterview = useCallback(async () => {
     stopTTS()
     stopRecording()
     // Clean up camera stream
@@ -1527,9 +1608,30 @@ export default function InterviewCoach() {
         : ['Practice with a shorter session first', 'Try the 3-question option to build confidence'],
       closingMessage: 'Interview ended.',
     }
-    setResults(sessionResults)
-    setMode('results')
-  }
+
+    // Speak a brief closing line before showing results
+    const closingLine = liveScores.relevance > 0
+      ? "No worries, we can stop here. Let me compile your results."
+      : "Alright, we'll wrap up here."
+    
+    // Add closing message to chat
+    const closingMsg: ChatMessage = {
+      id: `ai-end-${Date.now()}`,
+      role: 'ai',
+      content: closingLine,
+      timestamp: Date.now(),
+    }
+    setMessages((prev) => [...prev, closingMsg])
+
+    // Wait for closing TTS to finish (with a 2s minimum delay), then show results
+    const minDelay = new Promise<void>((r) => setTimeout(r, 2000))
+    const ttsDone = playTTSAndWait(closingLine, 8000)
+
+    Promise.all([minDelay, ttsDone]).finally(() => {
+      setResults(sessionResults)
+      setMode('results')
+    })
+  }, [liveScores, stopTTS, stopRecording, playTTSAndWait])
 
   // ─── Generate Improvement Tips ───────────────────────────────────────
 
