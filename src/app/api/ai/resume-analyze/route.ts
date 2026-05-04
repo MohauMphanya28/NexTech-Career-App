@@ -10,6 +10,49 @@ async function getZAI() {
   return zaiInstance
 }
 
+// ─── Document Text Extraction ────────────────────────────────────────────────
+
+async function extractTextFromPdf(base64: string): Promise<string> {
+  const { PDFParse } = await import('pdf-parse')
+  const path = await import('path')
+  const buffer = Buffer.from(base64, 'base64')
+  const uint8 = new Uint8Array(buffer)
+  const pdfjsDistPath = require.resolve('pdfjs-dist/package.json')
+  const parser = new PDFParse(uint8, {
+    standardFontDataUrl: path.join(path.dirname(pdfjsDistPath), 'standard_fonts') + '/',
+  })
+  await parser.load()
+  const result = await parser.getText()
+  return result.text || result.pages?.map((p: any) => p.text).join('\n\n') || ''
+}
+
+async function extractTextFromDocx(base64: string): Promise<string> {
+  const mammoth = await import('mammoth')
+  const buffer = Buffer.from(base64, 'base64')
+  const result = await mammoth.extractRawText({ buffer })
+  return result.value || ''
+}
+
+function extractTextFromTxt(base64: string): string {
+  return Buffer.from(base64, 'base64').toString('utf-8')
+}
+
+async function extractText(base64: string, mimeType: string): Promise<string> {
+  if (mimeType === 'application/pdf') {
+    return extractTextFromPdf(base64)
+  }
+  if (
+    mimeType === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' ||
+    mimeType === 'application/msword'
+  ) {
+    return extractTextFromDocx(base64)
+  }
+  // text/plain or fallback
+  return extractTextFromTxt(base64)
+}
+
+// ─── Main Handler ────────────────────────────────────────────────────────────
+
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json()
@@ -31,58 +74,28 @@ export async function POST(req: NextRequest) {
       )
     }
 
-    const zai = await getZAI()
-
-    // Step 1: Extract resume content using VLM (file_url type for documents)
-    const dataUri = `data:${mimeType};base64,${fileBase64}`
-
+    // Step 1: Extract text from the document
     let extractedContent = ''
 
     try {
-      const extractionResponse = await zai.chat.completions.createVision({
-        messages: [
-          {
-            role: 'user',
-            content: [
-              {
-                type: 'text',
-                text: `You are a professional resume parser. Extract ALL content from this resume document. Preserve the exact structure and text. Output the complete resume content in a well-structured format, including:
-- Full name and contact details
-- Professional summary/objective (if present)
-- All work experience entries (job title, company, dates, descriptions)
-- All education entries (degree, institution, year)
-- All skills listed
-- Any other sections (certifications, projects, volunteer work, etc.)
-
-Extract every single detail. Do not summarize or omit anything. If something is unclear, transcribe it as-is.`,
-              },
-              {
-                type: 'file_url',
-                file_url: { url: dataUri },
-              },
-            ],
-          },
-        ],
-        thinking: { type: 'disabled' },
-      })
-
-      extractedContent = extractionResponse.choices[0]?.message?.content || ''
-    } catch (vlmError) {
-      console.error('VLM extraction error:', vlmError)
+      extractedContent = await extractText(fileBase64, mimeType)
+    } catch (extractError) {
+      console.error('Document extraction error:', extractError)
       return NextResponse.json(
-        { error: 'Could not read the resume file. Please try uploading a PDF or TXT file instead.' },
+        { error: 'Could not read the resume file. Please ensure it is a valid PDF, DOCX, or TXT file.' },
         { status: 400 }
       )
     }
 
     if (!extractedContent.trim()) {
       return NextResponse.json(
-        { error: 'Could not extract content from the resume. Please ensure the file is readable.' },
+        { error: 'Could not extract any text from the resume. The file may be empty, image-based, or corrupted. Please try a different file.' },
         { status: 400 }
       )
     }
 
     // Step 2: Analyze the extracted content using LLM
+    const zai = await getZAI()
     const jobContext = jobTarget
       ? `The user is targeting this type of role: "${jobTarget}". Evaluate the resume's fitness for this specific role.`
       : 'Evaluate the resume for general professional opportunities in the South African job market.'
