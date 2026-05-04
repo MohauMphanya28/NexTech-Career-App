@@ -1,0 +1,1 @@
+{"name":"resume-analyzer-service","version":"1.0.0","private":true,"scripts":{"dev":"bun --hot index.ts"},"dependencies":{"z-ai-web-dev-sdk":"latest","pdf-parse":"^2.4.5","mammoth":"^1.12.0"}}
