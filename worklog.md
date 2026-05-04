@@ -370,3 +370,52 @@ Stage Summary:
 - Reduced delays make the conversation feel responsive and real-time
 - Mute button now actually works (previous `showMuted` was non-functional)
 - All API endpoints tested and verified working
+
+---
+Task ID: 14
+Agent: Main Orchestrator
+Task: Fix play()/pause() AbortError and improve conversation naturalness
+
+Work Log:
+- **Fixed AbortError** — "The play() request was interrupted by a call to pause()":
+  - Root cause: When `stopTTS()` or a new `playTTS()` called `pause()` on an audio element whose `play()` Promise hadn't resolved yet, the browser threw an AbortError
+  - Fix 1: In `stopTTS()`, set `currentAudioRef.current = null` BEFORE calling `pause()` so the onended/onerror handlers know the audio was intentionally stopped
+  - Fix 2: In `playTTS()`, same pattern — null the ref before pausing old audio
+  - Fix 3: Wrapped `audio.play()` in a try-catch that specifically catches `AbortError` (DOMException name === 'AbortError') and silently returns without logging it as an error
+  - Fix 4: Guard `onended`/`onerror` handlers to only update state if the audio is still the current one (`currentAudioRef.current === audio`)
+  - Added `isMutedRef` to avoid stale closure in playTTS (removed `isMuted` from useCallback dependencies)
+
+- **Improved conversation naturalness — speak feedback instead of just question**:
+  - Previously: Only the next question was spoken via TTS, while the feedback was silently displayed
+  - Now: The full conversational feedback text (which includes reaction + feedback + transition to next question) is spoken via TTS
+  - This makes the AI sound like a real person saying "Hmm, good point about that. Now, let me ask you about..." instead of just abruptly asking the next question
+  - The next question is still displayed in chat after a 400ms visual pause
+
+- **Added playbackRate for faster speech**:
+  - Set `audio.playbackRate = 1.05` on the client-side Audio element for a subtle 5% speed-up
+  - This makes speech feel slightly more natural and human-paced without affecting pitch quality
+
+- **Adjusted speed and volume parameters for less robotic sound**:
+  - Speed increased by ~0.1 across all interviewers for faster, more conversational pace:
+    - Kazi: 1.2 → 1.3, Thabo: 1.1 → 1.2, Naledi: 1.15 → 1.25, James: 1.25 → 1.35, Zanele: 1.3 → 1.4
+  - Volume significantly reduced to prevent clipping/distortion that made voices sound metallic:
+    - Kazi: 1.8 → 1.0, Thabo: 1.5 → 0.9, Naledi: 1.8 → 1.0, James: 2.2 → 1.1, Zanele: 2.5 → 1.2
+  - TTS route: Clamped volume max from 10.0 to 3.0 to prevent extreme distortion
+
+- **Removed artificial delays**:
+  - Initial TTS after interview start: 200ms setTimeout → immediate
+  - Error fallback TTS: 200ms setTimeout → immediate
+  - Feedback TTS: now called immediately instead of waiting for next question timeout
+
+- **Improved TTS text preprocessing** (`/api/ai/tts/route.ts`):
+  - Added em-dash/en-dash to comma conversion for natural pauses
+  - Added automatic comma insertion after transitional phrases (however, therefore, moreover, etc.)
+  - These micro-pauses make TTS output sound more naturally paced
+
+Stage Summary:
+- AbortError no longer appears in console — play()/pause() race condition fully resolved
+- Conversation is more natural: AI speaks its full conversational response (feedback + transition + question) instead of just the question
+- Speech is faster and less robotic: higher speed parameters + 5% playbackRate boost
+- Volume distortion eliminated: reduced from 1.5-2.5 range to 0.9-1.2 range
+- All artificial delays removed for more responsive conversation flow
+- TTS text preprocessing adds natural micro-pauses at transition points

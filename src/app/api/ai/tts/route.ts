@@ -75,6 +75,23 @@ function preprocessTextForTTS(text: string): string {
   // Remove leading/trailing punctuation that doesn't make sense in speech
   cleaned = cleaned.replace(/^[-–—•·]+/, '').trim()
 
+  // Add natural micro-pauses: replace " — " (em dash) with a comma for a brief pause
+  cleaned = cleaned.replace(/\s+—\s+/g, ', ')
+  cleaned = cleaned.replace(/\s+–\s+/g, ', ')
+
+  // Break up very long sentences by adding commas at natural pause points
+  // (after transitional phrases like "However,", "Therefore,", etc.)
+  const transitionPhrases = [
+    'however', 'therefore', 'moreover', 'furthermore', 'nevertheless',
+    'additionally', 'consequently', 'meanwhile', 'otherwise', 'instead',
+    'for example', 'for instance', 'in fact', 'in other words',
+    'on the other hand', 'as a result', 'in addition',
+  ]
+  for (const phrase of transitionPhrases) {
+    const regex = new RegExp(`\\b${phrase}\\b(?!,)`, 'gi')
+    cleaned = cleaned.replace(regex, `${phrase},`)
+  }
+
   // Ensure text ends with sentence-ending punctuation for natural TTS pause
   if (cleaned.length > 0 && !/[.!?]$/.test(cleaned)) {
     cleaned += '.'
@@ -189,8 +206,11 @@ export async function POST(req: NextRequest) {
     const zai = await getZAI()
 
     // Clamp parameters to valid ranges
+    // Speed: 0.5–2.0 (higher = faster speech)
     const clampedSpeed = Math.max(0.5, Math.min(2.0, speed))
-    const clampedVolume = Math.max(0.1, Math.min(10.0, volume))
+    // Volume: 0.1–3.0 (higher values cause distortion/robotic sound)
+    // Previously used up to 10.0 which made voices sound metallic
+    const clampedVolume = Math.max(0.1, Math.min(3.0, volume))
 
     // Use wav format (the most reliably supported format for the TTS API)
     // If text is within limit, single request

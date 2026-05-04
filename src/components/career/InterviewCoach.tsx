@@ -120,8 +120,8 @@ const INTERVIEWERS: InterviewerProfile[] = [
     title: 'The Coach',
     description: 'Warm and natural. The most human-sounding coach for building real confidence.',
     voice: 'douji',
-    speed: 1.2,
-    volume: 1.8,
+    speed: 1.3,
+    volume: 1.0,
     accentColor: 'text-teal-400',
     accentBg: 'bg-teal-400/15',
     accentBorder: 'border-teal-400/60',
@@ -135,8 +135,8 @@ const INTERVIEWERS: InterviewerProfile[] = [
     title: 'The Corporate',
     description: 'Professional and measured. A deep, calm voice for realistic corporate interviews.',
     voice: 'xiaochen',
-    speed: 1.1,
-    volume: 1.5,
+    speed: 1.2,
+    volume: 0.9,
     accentColor: 'text-slate-300',
     accentBg: 'bg-slate-400/15',
     accentBorder: 'border-slate-400/60',
@@ -150,8 +150,8 @@ const INTERVIEWERS: InterviewerProfile[] = [
     title: 'The Friendly',
     description: 'Warm and conversational. Makes interviews feel like a relaxed chat over coffee.',
     voice: 'tongtong',
-    speed: 1.15,
-    volume: 1.8,
+    speed: 1.25,
+    volume: 1.0,
     accentColor: 'text-amber-400',
     accentBg: 'bg-amber-400/15',
     accentBorder: 'border-amber-400/60',
@@ -165,8 +165,8 @@ const INTERVIEWERS: InterviewerProfile[] = [
     title: 'The Executive',
     description: 'Sharp and commanding. A British-accented voice for high-stakes executive interviews.',
     voice: 'jam',
-    speed: 1.25,
-    volume: 2.2,
+    speed: 1.35,
+    volume: 1.1,
     accentColor: 'text-violet-400',
     accentBg: 'bg-violet-400/15',
     accentBorder: 'border-violet-400/60',
@@ -180,8 +180,8 @@ const INTERVIEWERS: InterviewerProfile[] = [
     title: 'The Motivator',
     description: 'Energetic and expressive. A passionate voice that fires you up to do your best.',
     voice: 'luodo',
-    speed: 1.3,
-    volume: 2.5,
+    speed: 1.4,
+    volume: 1.2,
     accentColor: 'text-rose-400',
     accentBg: 'bg-rose-400/15',
     accentBorder: 'border-rose-400/60',
@@ -604,6 +604,8 @@ export default function InterviewCoach() {
   const recordingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   // Ref for sendAnswer to avoid stale closures in mediaRecorder.onstop
   const sendAnswerRef = useRef<(text: string) => Promise<void>>(async () => {})
+  // Ref for isMuted to avoid stale closures in playTTS
+  const isMutedRef = useRef(false)
 
   // ─── Check Mic Permission ────────────────────────────────────────────
 
@@ -682,15 +684,17 @@ export default function InterviewCoach() {
 
   const playTTS = useCallback(async (text: string): Promise<void> => {
     // If user has muted the AI, skip TTS playback but continue the conversation
-    if (isMuted) return
+    if (isMutedRef.current) return
 
     try {
       setIsAiSpeaking(true)
 
-      // Stop any currently playing audio
+      // Stop any currently playing audio — null the ref BEFORE pause so
+      // the onended/onerror handlers know it was intentionally stopped
       if (currentAudioRef.current) {
-        currentAudioRef.current.pause()
+        const oldAudio = currentAudioRef.current
         currentAudioRef.current = null
+        oldAudio.pause()
       }
 
       const res = await fetch('/api/ai/tts', {
@@ -722,19 +726,27 @@ export default function InterviewCoach() {
 
       const audioUrl = URL.createObjectURL(audioBlob)
       const audio = new Audio(audioUrl)
+      // Slightly speed up playback for more natural, human-like speech pace
+      audio.playbackRate = 1.05
       currentAudioRef.current = audio
 
       audio.onended = () => {
-        setIsAiSpeaking(false)
+        // Only update state if this is still the active audio
+        if (currentAudioRef.current === audio) {
+          setIsAiSpeaking(false)
+          currentAudioRef.current = null
+        }
         URL.revokeObjectURL(audioUrl)
-        currentAudioRef.current = null
       }
 
       audio.onerror = () => {
-        console.error('Audio playback error')
-        setIsAiSpeaking(false)
+        // Only update state if this is still the active audio
+        if (currentAudioRef.current === audio) {
+          console.error('Audio playback error')
+          setIsAiSpeaking(false)
+          currentAudioRef.current = null
+        }
         URL.revokeObjectURL(audioUrl)
-        currentAudioRef.current = null
       }
 
       // Ensure audio context is active (handles browser autoplay policy)
@@ -742,19 +754,37 @@ export default function InterviewCoach() {
         await audioContextRef.current.resume()
       }
 
-      await audio.play()
+      // play() returns a Promise — catch AbortError which occurs when pause()
+      // is called before the play promise resolves (e.g., user stops audio or
+      // a new TTS call interrupts this one). This is expected, not an error.
+      try {
+        await audio.play()
+      } catch (playError: unknown) {
+        const err = playError as DOMException
+        if (err.name === 'AbortError') {
+          // Audio was interrupted by pause() — this is normal (e.g., user started recording)
+          // Don't update state since the audio was intentionally stopped
+          return
+        }
+        // Re-throw unexpected errors
+        throw playError
+      }
     } catch (error) {
       console.error('TTS playback error:', error)
       setIsAiSpeaking(false)
     }
-  }, [selectedInterviewer, isMuted])
+  }, [selectedInterviewer])
 
   // ─── Stop TTS Audio ──────────────────────────────────────────────────
 
   const stopTTS = useCallback(() => {
     if (currentAudioRef.current) {
-      currentAudioRef.current.pause()
+      // Null the ref BEFORE pause() so the onended/onerror handlers
+      // know the audio was intentionally stopped and skip state updates.
+      // This prevents the "play() interrupted by pause()" AbortError.
+      const audio = currentAudioRef.current
       currentAudioRef.current = null
+      audio.pause()
     }
     setIsAiSpeaking(false)
   }, [])
@@ -768,6 +798,11 @@ export default function InterviewCoach() {
     }
     playTTS(msg.content)
   }, [isAiSpeaking, playTTS, stopTTS])
+
+  // Keep isMutedRef in sync with isMuted state
+  useEffect(() => {
+    isMutedRef.current = isMuted
+  }, [isMuted])
 
   // ─── Voice Recording ─────────────────────────────────────────────────
 
@@ -949,10 +984,8 @@ export default function InterviewCoach() {
         }
         setMessages([welcomeMsg])
 
-        // Auto-speak the first question — minimal delay for responsiveness
-        setTimeout(() => {
-          playTTS(data.question)
-        }, 200)
+        // Auto-speak the first question immediately — no delay for responsiveness
+        playTTS(data.question)
 
         // Create session in store
         setInterviewSession({
@@ -978,7 +1011,7 @@ export default function InterviewCoach() {
         timestamp: Date.now(),
       }
       setMessages([errorMsg])
-      setTimeout(() => playTTS(errorMsg.content), 200)
+      playTTS(errorMsg.content)
     } finally {
       setIsLoading(false)
       setAiTyping(false)
@@ -1053,7 +1086,8 @@ export default function InterviewCoach() {
         })
 
         // The feedback from the API is now conversational (spokenText format)
-        // It already includes the reaction + brief feedback, so we use it directly
+        // It already includes the reaction + brief feedback + transition to next question,
+        // so speaking it gives the most natural conversation flow.
         const feedbackText = data.feedback || 'Good point.'
         const feedbackMsg: ChatMessage = {
           id: `feedback-${Date.now()}`,
@@ -1116,7 +1150,11 @@ export default function InterviewCoach() {
             return currentLiveScores // Don't modify — just read for final calculation
           })
         } else {
-          // Add next question and speak it — reduced delay for natural feel
+          // Speak the full conversational feedback immediately (includes reaction + transition + question)
+          // This is more natural than speaking just the next question separately
+          playTTS(feedbackText)
+
+          // Add next question to chat display after a brief pause for visual flow
           isWaitingForNextQuestion = true
           setTimeout(() => {
             const nextQuestion = data.nextQuestion || 'Can you tell me more about your experience?'
@@ -1130,10 +1168,7 @@ export default function InterviewCoach() {
             setCurrentQuestionNum((prev) => prev + 1)
             setAiTyping(false)
             setIsSending(false)
-
-            // Auto-speak the next question immediately
-            playTTS(nextQuestion)
-          }, 200)
+          }, 400)
           return
         }
       }
