@@ -12,11 +12,21 @@ async function getZAI() {
 
 export async function POST(req: NextRequest) {
   try {
-    const { fileBase64, mimeType, fileName, jobTarget } = await req.json()
+    const body = await req.json()
+    const { fileBase64, mimeType, fileName, jobTarget } = body
 
     if (!fileBase64 || !mimeType) {
       return NextResponse.json(
         { error: 'File data and mime type are required' },
+        { status: 400 }
+      )
+    }
+
+    // Check base64 size — roughly 10MB raw = ~13.3MB base64
+    const base64SizeBytes = Math.ceil((fileBase64.length * 3) / 4)
+    if (base64SizeBytes > 10 * 1024 * 1024) {
+      return NextResponse.json(
+        { error: 'File is too large. Please upload a resume under 10MB.' },
         { status: 400 }
       )
     }
@@ -26,14 +36,17 @@ export async function POST(req: NextRequest) {
     // Step 1: Extract resume content using VLM (file_url type for documents)
     const dataUri = `data:${mimeType};base64,${fileBase64}`
 
-    const extractionResponse = await zai.chat.completions.createVision({
-      messages: [
-        {
-          role: 'user',
-          content: [
-            {
-              type: 'text',
-              text: `You are a professional resume parser. Extract ALL content from this resume document. Preserve the exact structure and text. Output the complete resume content in a well-structured format, including:
+    let extractedContent = ''
+
+    try {
+      const extractionResponse = await zai.chat.completions.createVision({
+        messages: [
+          {
+            role: 'user',
+            content: [
+              {
+                type: 'text',
+                text: `You are a professional resume parser. Extract ALL content from this resume document. Preserve the exact structure and text. Output the complete resume content in a well-structured format, including:
 - Full name and contact details
 - Professional summary/objective (if present)
 - All work experience entries (job title, company, dates, descriptions)
@@ -42,18 +55,25 @@ export async function POST(req: NextRequest) {
 - Any other sections (certifications, projects, volunteer work, etc.)
 
 Extract every single detail. Do not summarize or omit anything. If something is unclear, transcribe it as-is.`,
-            },
-            {
-              type: 'file_url',
-              file_url: { url: dataUri },
-            },
-          ],
-        },
-      ],
-      thinking: { type: 'disabled' },
-    })
+              },
+              {
+                type: 'file_url',
+                file_url: { url: dataUri },
+              },
+            ],
+          },
+        ],
+        thinking: { type: 'disabled' },
+      })
 
-    const extractedContent = extractionResponse.choices[0]?.message?.content || ''
+      extractedContent = extractionResponse.choices[0]?.message?.content || ''
+    } catch (vlmError) {
+      console.error('VLM extraction error:', vlmError)
+      return NextResponse.json(
+        { error: 'Could not read the resume file. Please try uploading a PDF or TXT file instead.' },
+        { status: 400 }
+      )
+    }
 
     if (!extractedContent.trim()) {
       return NextResponse.json(
@@ -172,7 +192,7 @@ IMPORTANT: Return ONLY valid JSON. No markdown, no code fences, no extra text. A
     try {
       analysis = JSON.parse(analysisText)
     } catch {
-      console.error('Failed to parse resume analysis JSON')
+      console.error('Failed to parse resume analysis JSON:', analysisText.substring(0, 200))
       return NextResponse.json({
         success: true,
         extractedContent,
@@ -205,8 +225,9 @@ IMPORTANT: Return ONLY valid JSON. No markdown, no code fences, no extra text. A
     })
   } catch (error) {
     console.error('Resume analysis error:', error)
+    const message = error instanceof Error ? error.message : 'Failed to analyze resume. Please try again.'
     return NextResponse.json(
-      { error: 'Failed to analyze resume. Please try again.' },
+      { error: message },
       { status: 500 }
     )
   }

@@ -278,9 +278,22 @@ export default function ResumeAnalyzer() {
     }, 500)
 
     try {
-      // Convert file to base64
-      const arrayBuffer = await selectedFile.arrayBuffer()
-      const base64 = Buffer.from(arrayBuffer).toString('base64')
+      // Convert file to base64 (browser-compatible — no Node.js Buffer)
+      const base64 = await new Promise<string>((resolve, reject) => {
+        const reader = new FileReader()
+        reader.onload = () => {
+          const result = reader.result as string
+          // Remove the data URL prefix (e.g. "data:application/pdf;base64,")
+          const base64Data = result.split(',')[1]
+          if (base64Data) {
+            resolve(base64Data)
+          } else {
+            reject(new Error('Failed to convert file to base64'))
+          }
+        }
+        reader.onerror = () => reject(new Error('Failed to read file'))
+        reader.readAsDataURL(selectedFile)
+      })
 
       // Determine mime type
       let mimeType = selectedFile.type

@@ -520,3 +520,31 @@ Stage Summary:
 - Custom domain https://nextechcareer.co.za set in metadata (OG URL, canonical, author)
 - Full OpenGraph and Twitter card metadata for professional link sharing
 - South African locale (en_ZA) properly set in OG metadata
+
+---
+Task ID: 18
+Agent: Main Orchestrator
+Task: Fix Resume Analyzer feature not working
+
+Work Log:
+- Investigated the Resume Analyzer component and API route
+- **Root cause**: `Buffer.from(arrayBuffer).toString('base64')` on line 283 of ResumeAnalyzer.tsx
+  - `Buffer` is a Node.js API that does NOT exist in the browser
+  - Since ResumeAnalyzer is a `'use client'` component, it runs in the browser
+  - This caused `ReferenceError: Buffer is not defined` the moment user clicked "Analyse My Resume"
+  - The error was caught by the try/catch which showed a generic "Failed to analyze resume" toast
+- **Fix**: Replaced `Buffer.from()` with browser-compatible `FileReader.readAsDataURL()` approach
+  - FileReader is the standard Web API for reading file contents in the browser
+  - It reads the file as a data URL, from which we extract the base64 portion
+  - This works for all file types (PDF, DOCX, DOC, TXT)
+- **API route improvements** (`/api/ai/resume-analyze/route.ts`):
+  - Added server-side file size validation (base64 size → raw bytes estimation)
+  - Added try/catch around VLM extraction call with specific error message for document reading failures
+  - Improved error message propagation (now shows actual error instead of generic message)
+  - Added truncated JSON logging for parse failures (first 200 chars for debugging)
+- **Verification**: Page compiles successfully (47519 bytes), no lint errors, no Buffer.from references in output
+
+Stage Summary:
+- Resume Analyzer now works: replaced Node.js Buffer.from() with browser FileReader API
+- API route has better error handling for VLM extraction failures and file size limits
+- Both files pass lint checks cleanly
