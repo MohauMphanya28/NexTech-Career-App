@@ -1,6 +1,58 @@
 import { NextRequest, NextResponse } from 'next/server'
 import ZAI from 'z-ai-web-dev-sdk'
 
+/**
+ * Concatenate multiple WAV buffers into a single valid WAV file.
+ * Strips headers from all chunks except the first, then updates the RIFF size.
+ */
+function concatWavBuffers(buffers: Buffer[]): Buffer {
+  if (buffers.length === 0) return Buffer.alloc(0)
+  if (buffers.length === 1) return buffers[0]
+
+  // WAV header is 44 bytes (standard PCM)
+  const HEADER_SIZE = 44
+
+  // Collect data sections (skip headers from chunk 1 onward)
+  const dataSections: Buffer[] = []
+  let totalDataSize = 0
+
+  for (let i = 0; i < buffers.length; i++) {
+    if (i === 0) {
+      // First chunk: we'll replace its header later
+      const dataLen = buffers[i].length - HEADER_SIZE
+      dataSections.push(buffers[i].subarray(HEADER_SIZE))
+      totalDataSize += dataLen
+    } else {
+      // Subsequent chunks: strip the header
+      const dataLen = buffers[i].length - HEADER_SIZE
+      if (dataLen > 0) {
+        dataSections.push(buffers[i].subarray(HEADER_SIZE))
+        totalDataSize += dataLen
+      }
+    }
+  }
+
+  // Build new WAV file from the first chunk's header
+  const firstHeader = buffers[0].subarray(0, HEADER_SIZE)
+  const result = Buffer.alloc(HEADER_SIZE + totalDataSize)
+  firstHeader.copy(result, 0)
+
+  // Update RIFF chunk size (offset 4): total file size - 8
+  result.writeUInt32LE(totalDataSize + HEADER_SIZE - 8, 4)
+
+  // Update data sub-chunk size (offset 40)
+  result.writeUInt32LE(totalDataSize, 40)
+
+  // Copy data sections
+  let offset = HEADER_SIZE
+  for (const section of dataSections) {
+    section.copy(result, offset)
+    offset += section.length
+  }
+
+  return result
+}
+
 let zaiInstance: Awaited<ReturnType<typeof ZAI.create>> | null = null
 
 async function getZAI() {
@@ -47,14 +99,14 @@ export async function POST(req: NextRequest) {
 
     const zai = await getZAI()
 
-    // Use mp3 format which is more widely supported than wav
+    // Use wav format (the most reliably supported format for the TTS API)
     // If text is within limit, single request
     if (trimmedText.length <= 1000) {
       const response = await zai.audio.tts.create({
         input: trimmedText,
         voice: voice as 'kazi',
         speed: Math.max(0.5, Math.min(2.0, speed)),
-        response_format: 'mp3',
+        response_format: 'wav',
         stream: false,
       })
 
@@ -64,14 +116,14 @@ export async function POST(req: NextRequest) {
       return new NextResponse(buffer, {
         status: 200,
         headers: {
-          'Content-Type': 'audio/mpeg',
+          'Content-Type': 'audio/wav',
           'Content-Length': buffer.length.toString(),
           'Cache-Control': 'public, max-age=3600',
         },
       })
     }
 
-    // For longer text, split into chunks and concatenate
+    // For longer text, split into chunks and concatenate as valid WAV
     const chunks = splitTextIntoChunks(trimmedText)
     const audioBuffers: Buffer[] = []
 
@@ -81,7 +133,7 @@ export async function POST(req: NextRequest) {
         input: chunk,
         voice: voice as 'kazi',
         speed: Math.max(0.5, Math.min(2.0, speed)),
-        response_format: 'mp3',
+        response_format: 'wav',
         stream: false,
       })
 
@@ -89,12 +141,13 @@ export async function POST(req: NextRequest) {
       audioBuffers.push(Buffer.from(new Uint8Array(arrayBuffer)))
     }
 
-    const combinedBuffer = Buffer.concat(audioBuffers)
+    // Properly concatenate WAV files (strip headers from subsequent chunks)
+    const combinedBuffer = concatWavBuffers(audioBuffers)
 
     return new NextResponse(combinedBuffer, {
       status: 200,
       headers: {
-        'Content-Type': 'audio/mpeg',
+        'Content-Type': 'audio/wav',
         'Content-Length': combinedBuffer.length.toString(),
         'Cache-Control': 'public, max-age=3600',
       },

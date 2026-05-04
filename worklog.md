@@ -227,3 +227,33 @@ Stage Summary:
 - Users get helpful feedback when voice transcription fails
 - Score calculation corrected — no double-counting
 - TTS switched to mp3 format for reliability
+
+---
+Task ID: 11
+Agent: Main Orchestrator
+Task: Fix TTS "不支持当前response_format值" error (mp3 format rejected by API)
+
+Work Log:
+- User reported console error: "TTS failed" at InterviewCoach.tsx:573
+- Investigated dev server logs — found TTS API returning 400: {"error":{"code":"1214","message":"不支持当前response_format值"}}
+- Root cause: The TTS API rejects `response_format: 'mp3'`. The previous fix (Task 10) incorrectly changed from wav to mp3
+- Loaded TTS skill documentation — confirmed `wav` is the default and most reliably supported format
+- Fixed TTS route (/api/ai/tts/route.ts):
+  - Changed `response_format` from `'mp3'` to `'wav'` in both single-request and chunked paths
+  - Changed `Content-Type` from `'audio/mpeg'` to `'audio/wav'`
+  - Added `concatWavBuffers()` utility for proper WAV file concatenation (strip headers from subsequent chunks, update RIFF size)
+  - Previous approach of `Buffer.concat()` produced invalid WAV for multi-chunk texts
+- Fixed ASR route (/api/ai/asr/route.ts):
+  - Added explicit `format: 'wav'` parameter to help the ASR API recognize the format
+- Fixed InterviewCoach.tsx playTTS:
+  - Replaced `throw new Error('TTS failed')` with graceful degradation (log error + return)
+  - Interview continues without audio if TTS fails, instead of crashing
+  - Added blob size validation (< 100 bytes = invalid audio)
+  - Added detailed error logging with status code and response body
+- Verified: TTS endpoint now returns 200 with valid 216KB WAV file
+
+Stage Summary:
+- TTS API now works correctly with `wav` format (the API's native format)
+- ASR reliability improved with explicit `format: 'wav'` hint
+- Frontend gracefully handles TTS failures — interview always continues
+- WAV concatenation properly handles long text chunks

@@ -570,9 +570,22 @@ export default function InterviewCoach() {
         body: JSON.stringify({ text, voice: 'kazi', speed: 1.0 }),
       })
 
-      if (!res.ok) throw new Error('TTS failed')
+      if (!res.ok) {
+        const errorData = await res.json().catch(() => ({}))
+        console.error('TTS API error:', res.status, errorData)
+        setIsAiSpeaking(false)
+        return // Graceful degradation — interview continues without audio
+      }
 
       const audioBlob = await res.blob()
+
+      // Validate the blob is actual audio data
+      if (audioBlob.size < 100) {
+        console.error('TTS returned empty/too-small audio blob:', audioBlob.size, 'bytes')
+        setIsAiSpeaking(false)
+        return
+      }
+
       const audioUrl = URL.createObjectURL(audioBlob)
       const audio = new Audio(audioUrl)
       currentAudioRef.current = audio
@@ -584,6 +597,7 @@ export default function InterviewCoach() {
       }
 
       audio.onerror = () => {
+        console.error('Audio playback error')
         setIsAiSpeaking(false)
         URL.revokeObjectURL(audioUrl)
         currentAudioRef.current = null
