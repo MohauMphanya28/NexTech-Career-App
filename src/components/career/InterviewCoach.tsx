@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useRef, useEffect, useCallback, useMemo } from 'react'
+import Image from 'next/image'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
   Mic,
@@ -115,6 +116,7 @@ interface InterviewerProfile {
   avatarGradient: string
   initials: string
   personality: string
+  image: string
 }
 
 const INTERVIEWERS: InterviewerProfile[] = [
@@ -132,6 +134,7 @@ const INTERVIEWERS: InterviewerProfile[] = [
     avatarGradient: 'from-teal-400 to-cyan-400',
     initials: 'KZ',
     personality: 'You are Kazi, a supportive and encouraging interview coach who sounds like a real person, not a robot. You speak naturally, using contractions and occasional filler words like "Hmm" and "Right". You ask clear questions, give warm and constructive feedback in a conversational way, and celebrate improvements. You often add words of encouragement like "Great start!" or "You\'re making good progress!" Keep your spoken responses concise — 2-3 short sentences of feedback, then ask the next question.',
+    image: '/interviewers/kazi.png',
   },
   {
     id: 'thabo',
@@ -147,6 +150,7 @@ const INTERVIEWERS: InterviewerProfile[] = [
     avatarGradient: 'from-slate-300 to-slate-500',
     initials: 'TH',
     personality: 'You are Thabo, a senior corporate HR director who speaks with authority and deliberation. You use measured, professional language with occasional phrases like "I see" and "Let me push back on that." You ask sharp, probing questions that challenge candidates to think deeply. You give direct, no-nonsense feedback focused on professionalism and business impact. Keep your spoken responses concise — 2-3 short sentences of feedback, then ask the next question.',
+    image: '/interviewers/thabo.png',
   },
   {
     id: 'naledi',
@@ -162,6 +166,7 @@ const INTERVIEWERS: InterviewerProfile[] = [
     avatarGradient: 'from-amber-400 to-orange-400',
     initials: 'NL',
     personality: 'You are Naledi, a warm and friendly interviewer who puts candidates at ease with your natural, flowing conversation style. You use phrases like "Oh, that\'s interesting!" and "Tell me more about that..." You ask questions in a conversational, story-telling way. Your feedback is gentle and supportive, like a mentor who genuinely cares. Keep your spoken responses concise — 2-3 short sentences of feedback, then ask the next question naturally.',
+    image: '/interviewers/naledi.png',
   },
   {
     id: 'james',
@@ -177,6 +182,7 @@ const INTERVIEWERS: InterviewerProfile[] = [
     avatarGradient: 'from-violet-400 to-purple-500',
     initials: 'JM',
     personality: 'You are James, a seasoned C-suite executive with a British accent who conducts high-stakes interviews with crisp authority. You use phrases like "Quite" and "I\'d challenge you on that." You ask demanding, strategic questions that test leadership thinking. Your feedback is analytical and focused on executive presence. Keep your spoken responses concise and commanding — 1-2 sharp sentences of feedback, then directly ask the next question.',
+    image: '/interviewers/james.png',
   },
   {
     id: 'zanele',
@@ -192,6 +198,7 @@ const INTERVIEWERS: InterviewerProfile[] = [
     avatarGradient: 'from-rose-400 to-pink-500',
     initials: 'ZN',
     personality: 'You are Zanele, a passionate and energetic career coach who speaks with fire and conviction! You use powerful phrases like "I love that!" and "Now we\'re talking!" and "You\'ve got so much potential!" You push candidates to dig deeper and aim higher. Your feedback is enthusiastic and action-oriented. Keep your spoken responses punchy and high-energy — 2 short sentences of feedback with excitement, then fire the next question!',
+    image: '/interviewers/zanele.png',
   },
 ]
 
@@ -1664,13 +1671,24 @@ export default function InterviewCoach() {
                   whileHover={{ scale: 1.01 }}
                   whileTap={{ scale: 0.98 }}
                 >
-                  {/* Avatar */}
-                  <div className={`
-                    flex size-12 shrink-0 items-center justify-center rounded-full
-                    bg-gradient-to-br ${interviewer.avatarGradient}
-                    shadow-lg
-                  `}>
-                    <span className="text-sm font-bold text-white">{interviewer.initials}</span>
+                  {/* Avatar - 3D Face Thumbnail */}
+                  <div className="relative size-12 shrink-0 overflow-hidden rounded-full shadow-lg"
+                    style={{
+                      padding: '2px',
+                      background: isSelected
+                        ? `linear-gradient(135deg, ${interviewer.accentColor.replace('text-', '')}, transparent)`
+                        : 'linear-gradient(135deg, rgba(255,255,255,0.15), rgba(255,255,255,0.05))',
+                    }}
+                  >
+                    <div className="relative size-full overflow-hidden rounded-full">
+                      <Image
+                        src={interviewer.image}
+                        alt={interviewer.name}
+                        fill
+                        className="object-cover object-top"
+                        sizes="48px"
+                      />
+                    </div>
                   </div>
                   {/* Info */}
                   <div className="flex-1 min-w-0">
@@ -2132,8 +2150,14 @@ export default function InterviewCoach() {
                               }
                             `}
                           >
-                            <div className={`flex size-8 shrink-0 items-center justify-center rounded-full bg-gradient-to-br ${interviewer.avatarGradient} shadow-md`}>
-                              <span className="text-[10px] font-bold text-white">{interviewer.initials}</span>
+                            <div className="relative size-8 shrink-0 overflow-hidden rounded-full shadow-md">
+                              <Image
+                                src={interviewer.image}
+                                alt={interviewer.name}
+                                fill
+                                className="object-cover object-top"
+                                sizes="32px"
+                              />
                             </div>
                             <div className="flex-1 min-w-0">
                               <div className="flex items-center gap-1.5">
@@ -2210,7 +2234,15 @@ export default function InterviewCoach() {
         {/* Left: Interviewer info */}
         <div className="flex items-center gap-2 sm:gap-3">
           <div className={`relative flex size-9 items-center justify-center rounded-xl sm:size-10 sm:rounded-2xl ${selectedInterviewer.accentBg}`}>
-            <span className={`text-xs font-bold sm:text-sm ${selectedInterviewer.accentColor}`}>{selectedInterviewer.initials}</span>
+            <div className="relative size-7 overflow-hidden rounded-lg sm:size-8">
+              <Image
+                src={selectedInterviewer.image}
+                alt={selectedInterviewer.name}
+                fill
+                className="object-cover object-top"
+                sizes="32px"
+              />
+            </div>
             {isAiSpeaking && (
               <motion.div
                 className={`absolute -right-0.5 -top-0.5 size-2.5 rounded-full sm:size-3 ${selectedInterviewer.accentColor.replace('text-', 'bg-')}`}
@@ -2448,7 +2480,15 @@ export default function InterviewCoach() {
                         return (
                           <div key={msg.id} className="flex items-start gap-2">
                             <div className={`mt-0.5 flex size-5 shrink-0 items-center justify-center rounded-full ${selectedInterviewer.accentBg}`}>
-                              <span className={`text-[8px] font-bold ${selectedInterviewer.accentColor}`}>{selectedInterviewer.initials}</span>
+                              <div className="relative size-4 overflow-hidden rounded-full">
+                                <Image
+                                  src={selectedInterviewer.image}
+                                  alt={selectedInterviewer.name}
+                                  fill
+                                  className="object-cover object-top"
+                                  sizes="16px"
+                                />
+                              </div>
                             </div>
                             <p className="text-[11px] leading-relaxed text-white/70">{msg.content}</p>
                           </div>
@@ -2483,7 +2523,15 @@ export default function InterviewCoach() {
                     {aiTyping && (
                       <div className="flex items-start gap-2">
                         <div className={`mt-0.5 flex size-5 shrink-0 items-center justify-center rounded-full ${selectedInterviewer.accentBg}`}>
-                          <span className={`text-[8px] font-bold ${selectedInterviewer.accentColor}`}>{selectedInterviewer.initials}</span>
+                          <div className="relative size-4 overflow-hidden rounded-full">
+                            <Image
+                              src={selectedInterviewer.image}
+                              alt={selectedInterviewer.name}
+                              fill
+                              className="object-cover object-top"
+                              sizes="16px"
+                            />
+                          </div>
                         </div>
                         <div className="flex gap-1 pt-1">
                           {[0, 1, 2].map((i) => (
