@@ -1,0 +1,94 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id            String    @id @default(cuid())
+  name          String?
+  email         String?
+  phone         String?
+  age           Int?
+  location      String?
+  education     String?
+  field         String?
+  experience    String?
+  skills        String?
+  careerGoal    String?
+  onboardingDone Boolean  @default(false)
+  onboardingStep Int     @default(0)
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  resumes       Resume[]
+  coverLetters  CoverLetter[]
+  interviews    Interview[]
+  progress      Progress[]
+}
+
+model Resume {
+  id           String   @id @default(cuid())
+  userId       String
+  title        String
+  personalInfo String   @default("{}")
+  summary      String   @default("")
+  experience   String   @default("[]")
+  education    String   @default("[]")
+  skills       String   @default("[]")
+  template     String   @default("modern")
+  atsScore     Int      @default(0)
+  content      String   @default("{}")
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model CoverLetter {
+  id           String   @id @default(cuid())
+  userId       String
+  title        String
+  jobTitle     String   @default("")
+  company      String   @default("")
+  jobDesc      String   @default("")
+  content      String   @default("")
+  tone         String   @default("formal")
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model Interview {
+  id           String   @id @default(cuid())
+  userId       String
+  type         String   @default("general")
+  industry     String   @default("general")
+  questions    String   @default("[]")
+  answers      String   @default("[]")
+  feedback     String   @default("[]")
+  overallScore Float    @default(0)
+  confidence   Float    @default(0)
+  clarity      Float    @default(0)
+  relevance    Float    @default(0)
+  completed    Boolean  @default(false)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model Progress {
+  id              String   @id @default(cuid())
+  userId          String
+  type            String
+  milestone       String
+  value           Float    @default(0)
+  createdAt       DateTime @default(now())
+
+  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
