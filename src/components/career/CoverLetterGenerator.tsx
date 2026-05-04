@@ -235,7 +235,7 @@ export default function CoverLetterGenerator() {
     setPhase('input')
   }, [])
 
-  const handleSave = useCallback(() => {
+  const handleSave = useCallback(async () => {
     setCoverLetterContent(editableContent)
     setCoverLetterJobTitle(localJobTitle)
     setCoverLetterCompany(localCompany)
@@ -252,6 +252,34 @@ export default function CoverLetterGenerator() {
     })
 
     toast.success('Cover letter saved!')
+
+    // Save to database for document history
+    try {
+      const storeState = useAppStore.getState()
+      const userId = storeState.dbUserId || storeState.user?.id
+      if (userId) {
+        await fetch('/api/career-documents', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            docType: 'cover-letter',
+            userId,
+            title: `${localJobTitle} at ${localCompany}`,
+            jobTitle: localJobTitle,
+            company: localCompany,
+            jobDesc: localJobDesc,
+            content: editableContent,
+            tone: localTone,
+          }),
+        })
+        // Refresh document list in background
+        fetch(`/api/career-documents?userId=${userId}`).then(r => r.json()).then(d => {
+          if (d.success) storeState.setSavedDocuments(d.documents)
+        }).catch(() => {})
+      }
+    } catch {
+      // Non-critical
+    }
   }, [
     editableContent,
     localJobTitle,

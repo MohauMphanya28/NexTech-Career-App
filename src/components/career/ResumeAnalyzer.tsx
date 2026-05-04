@@ -338,6 +338,40 @@ export default function ResumeAnalyzer() {
 
       setPhase('results')
       toast.success('Resume analysis complete!')
+
+      // Save analysis to database for document history
+      try {
+        const storeState = useAppStore.getState()
+        const userId = storeState.dbUserId || storeState.user?.id
+        if (userId) {
+          const improvedResume = data.analysis?.improvedResume
+          await fetch('/api/career-documents', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              docType: 'resume',
+              userId,
+              subType: 'analyzed',
+              title: `${selectedFile.name} Analysis`,
+              personalInfo: improvedResume?.personalInfo || {},
+              summary: improvedResume?.summary || '',
+              experience: improvedResume?.experience || [],
+              education: improvedResume?.education || [],
+              skills: improvedResume?.skills || [],
+              atsScore: data.analysis?.atsCompatibility?.score || data.analysis?.overallScore || 0,
+              analysisData: data.analysis,
+              originalFileName: selectedFile.name,
+              content: improvedResume || {},
+            }),
+          })
+          // Refresh document list in background
+          fetch(`/api/career-documents?userId=${userId}`).then(r => r.json()).then(d => {
+            if (d.success) storeState.setSavedDocuments(d.documents)
+          }).catch(() => {})
+        }
+      } catch {
+        // Non-critical - analysis is saved to store already
+      }
     } catch (error) {
       console.error('Resume analysis error:', error)
       toast.error(error instanceof Error ? error.message : 'Failed to analyze resume. Please try again.')

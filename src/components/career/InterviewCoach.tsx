@@ -1476,6 +1476,40 @@ export default function InterviewCoach() {
                 interviewCompleted: true,
                 currentStep: 'complete',
               })
+
+              // Save interview to database for document history (fire-and-forget)
+              try {
+                const storeState = useAppStore.getState()
+                const dbUserId = storeState.dbUserId || storeState.user?.id
+                if (dbUserId) {
+                  fetch('/api/career-documents', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                      docType: 'interview',
+                      userId: dbUserId,
+                      title: `${selectedIndustry} Interview`,
+                      interviewType: interviewSession?.type || 'general',
+                      industry: selectedIndustry,
+                      questions: messages.filter((m: ChatMessage) => m.role === 'ai').map((m: ChatMessage) => m.content),
+                      answers: messages.filter((m: ChatMessage) => m.role === 'user').map((m: ChatMessage) => m.content),
+                      feedback: [],
+                      overallScore: completedSession.score,
+                      confidence: completedSession.confidence,
+                      clarity: completedSession.clarity,
+                      relevance: completedSession.relevance,
+                      completed: true,
+                    }),
+                  }).then(() => {
+                    // Refresh document list in background
+                    fetch(`/api/career-documents?userId=${dbUserId}`).then(r => r.json()).then(d => {
+                      if (d.success) storeState.setSavedDocuments(d.documents)
+                    }).catch(() => {})
+                  }).catch(() => {})
+                }
+              } catch {
+                // Non-critical - interview results are saved to store already
+              }
             })
 
             return currentLiveScores // Don't modify — just read for final calculation
@@ -1590,6 +1624,39 @@ export default function InterviewCoach() {
       Promise.all([minDelay, ttsDone]).finally(() => {
         setResults(sessionResults)
         setMode('results')
+
+        // Save interview to database for document history
+        try {
+          const storeState = useAppStore.getState()
+          const dbUserId = storeState.dbUserId || storeState.user?.id
+          if (dbUserId) {
+            fetch('/api/career-documents', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                docType: 'interview',
+                userId: dbUserId,
+                title: `${selectedIndustry} Interview`,
+                interviewType: 'general',
+                industry: selectedIndustry,
+                questions: messages.filter((m: ChatMessage) => m.role === 'ai').map((m: ChatMessage) => m.content),
+                answers: messages.filter((m: ChatMessage) => m.role === 'user').map((m: ChatMessage) => m.content),
+                feedback: [],
+                overallScore: sessionResults.overallScore,
+                confidence: sessionResults.confidence,
+                clarity: sessionResults.clarity,
+                relevance: sessionResults.relevance,
+                completed: true,
+              }),
+            }).catch(() => {})
+            // Refresh document list in background
+            fetch(`/api/career-documents?userId=${dbUserId}`).then(r => r.json()).then(d => {
+              if (d.success) storeState.setSavedDocuments(d.documents)
+            }).catch(() => {})
+          }
+        } catch {
+          // Non-critical
+        }
       })
     } else {
       // Ask next question via API
@@ -1701,6 +1768,39 @@ export default function InterviewCoach() {
     Promise.all([minDelay, ttsDone]).finally(() => {
       setResults(sessionResults)
       setMode('results')
+
+      // Save interview to database for document history
+      try {
+        const storeState = useAppStore.getState()
+        const dbUserId = storeState.dbUserId || storeState.user?.id
+        if (dbUserId) {
+          fetch('/api/career-documents', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              docType: 'interview',
+              userId: dbUserId,
+              title: `${selectedIndustry} Interview`,
+              interviewType: 'general',
+              industry: selectedIndustry,
+              questions: messages.filter((m: ChatMessage) => m.role === 'ai').map((m: ChatMessage) => m.content),
+              answers: messages.filter((m: ChatMessage) => m.role === 'user').map((m: ChatMessage) => m.content),
+              feedback: [],
+              overallScore: sessionResults.overallScore,
+              confidence: sessionResults.confidence,
+              clarity: sessionResults.clarity,
+              relevance: sessionResults.relevance,
+              completed: liveScores.relevance > 0,
+            }),
+          }).catch(() => {})
+          // Refresh document list in background
+          fetch(`/api/career-documents?userId=${dbUserId}`).then(r => r.json()).then(d => {
+            if (d.success) storeState.setSavedDocuments(d.documents)
+          }).catch(() => {})
+        }
+      } catch {
+        // Non-critical
+      }
     })
   }, [liveScores, stopTTS, stopRecording, playTTSAndWait])
 

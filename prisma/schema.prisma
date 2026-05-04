@@ -31,21 +31,24 @@ model User {
 }
 
 model Resume {
-  id           String   @id @default(cuid())
-  userId       String
-  title        String
-  personalInfo String   @default("{}")
-  summary      String   @default("")
-  experience   String   @default("[]")
-  education    String   @default("[]")
-  skills       String   @default("[]")
-  template     String   @default("modern")
-  atsScore     Int      @default(0)
-  content      String   @default("{}")
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
+  id               String   @id @default(cuid())
+  userId           String
+  title            String
+  type             String   @default("built")  // built | analyzed | improved
+  personalInfo     String   @default("{}")
+  summary          String   @default("")
+  experience       String   @default("[]")
+  education        String   @default("[]")
+  skills           String   @default("[]")
+  template         String   @default("modern")
+  atsScore         Int      @default(0)
+  content          String   @default("{}")
+  analysisData     String   @default("{}")      // Full analysis JSON for analyzed resumes
+  originalFileName String   @default("")         // Original file name for analyzed resumes
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
 
-  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user             User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 }
 
 model CoverLetter {

@@ -10,6 +10,7 @@ import ResumeAnalyzer from '@/components/career/ResumeAnalyzer'
 import CoverLetterGenerator from '@/components/career/CoverLetterGenerator'
 import InterviewCoach from '@/components/career/InterviewCoach'
 import ProgressTracker from '@/components/career/ProgressTracker'
+import DocumentHistory from '@/components/career/DocumentHistory'
 import { User, LogOut, Edit3, ChevronRight, Shield } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
@@ -135,6 +136,7 @@ export default function Home() {
       {currentView === 'cover-letter' && <CoverLetterGenerator />}
       {currentView === 'interview' && <InterviewCoach />}
       {currentView === 'progress' && <ProgressTracker />}
+      {currentView === 'documents' && <DocumentHistory />}
       {currentView === 'profile' && <ProfileView />}
       <Navbar />
       <CareerGuide />

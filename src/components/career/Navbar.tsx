@@ -1,6 +1,6 @@
 'use client'
 
-import { LayoutDashboard, FileText, Mail, Mic, User } from 'lucide-react'
+import { LayoutDashboard, FileText, Mail, Mic, FolderOpen } from 'lucide-react'
 import { useAppStore, type AppView } from '@/lib/store'
 
 interface NavTab {
@@ -14,7 +14,7 @@ const tabs: NavTab[] = [
   { id: 'resume', label: 'Resume', icon: FileText },
   { id: 'cover-letter', label: 'Letter', icon: Mail },
   { id: 'interview', label: 'Interview', icon: Mic },
-  { id: 'profile', label: 'Profile', icon: User },
+  { id: 'documents', label: 'My Docs', icon: FolderOpen },
 ]
 
 export default function Navbar() {

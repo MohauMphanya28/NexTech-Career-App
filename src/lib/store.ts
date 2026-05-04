@@ -1,6 +1,6 @@
 import { create } from 'zustand'
 
-export type AppView = 'dashboard' | 'onboarding' | 'resume' | 'resume-analyzer' | 'cover-letter' | 'interview' | 'progress' | 'profile'
+export type AppView = 'dashboard' | 'onboarding' | 'resume' | 'resume-analyzer' | 'cover-letter' | 'interview' | 'progress' | 'profile' | 'documents'
 
 interface UserProfile {
   id: string
@@ -181,6 +181,12 @@ interface AppState {
   setCareerContext: (ctx: Partial<CareerContext>) => void
   resetCareerContext: () => void
 
+  // Document History (saved documents from DB)
+  savedDocuments: any[]
+  setSavedDocuments: (docs: any[]) => void
+  dbUserId: string | null
+  setDbUserId: (id: string | null) => void
+
   // Loading states
   isLoading: boolean
   setIsLoading: (loading: boolean) => void
@@ -273,6 +279,12 @@ export const useAppStore = create<AppState>((set) => ({
       currentStep: 'resume',
     }
   })),
+
+  // Document History
+  savedDocuments: [],
+  setSavedDocuments: (docs) => set({ savedDocuments: docs }),
+  dbUserId: null,
+  setDbUserId: (id) => set({ dbUserId: id }),
 
   // Loading
   isLoading: false,

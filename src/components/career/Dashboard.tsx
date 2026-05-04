@@ -13,6 +13,7 @@ import {
   Award,
   Zap,
   Search,
+  FolderOpen,
 } from 'lucide-react'
 import { useAppStore, type AppView } from '@/lib/store'
 import { Button } from '@/components/ui/button'
@@ -79,6 +80,14 @@ const quickActions: QuickAction[] = [
     accent: 'text-green-400',
     iconBg: 'bg-green-400/15',
     view: 'progress',
+  },
+  {
+    title: 'My Documents',
+    description: 'View saved resumes, letters & more',
+    icon: FolderOpen,
+    accent: 'text-amber-400',
+    iconBg: 'bg-amber-400/15',
+    view: 'documents',
   },
 ]
 

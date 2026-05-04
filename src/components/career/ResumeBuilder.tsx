@@ -516,6 +516,42 @@ export default function ResumeBuilder() {
         currentStep: 'cover-letter',
       })
 
+      // Save to database for document history
+      try {
+        const storeState = useAppStore.getState()
+        const userId = storeState.dbUserId || storeState.user?.id
+        if (userId) {
+          const saveRes = await fetch('/api/career-documents', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              docType: 'resume',
+              userId,
+              subType: 'built',
+              title: resumeData.title,
+              personalInfo: resumeData.personalInfo,
+              summary: resumeData.summary,
+              experience: resumeData.experience,
+              education: resumeData.education,
+              skills: resumeData.skills,
+              template: resumeData.template,
+              atsScore: resumeData.atsScore,
+              content: resumeData,
+            }),
+          })
+          const saveData = await saveRes.json()
+          if (saveData.success && saveData.document?.id && !storeState.dbUserId) {
+            // If this is the first save, we might need to update the userId
+          }
+          // Refresh document list in background
+          fetch(`/api/career-documents?userId=${userId}`).then(r => r.json()).then(d => {
+            if (d.success) storeState.setSavedDocuments(d.documents)
+          }).catch(() => {})
+        }
+      } catch {
+        // Non-critical - resume is saved to store already
+      }
+
       // Update user data on the backend
       try {
         await fetch('/api/user', {

@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useMemo } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { MessageCircle, X, ChevronRight, Sparkles, CheckCircle2, ArrowRight } from 'lucide-react'
+import { MessageCircle, X, ChevronRight, Sparkles, CheckCircle2, ArrowRight, FolderOpen, FileText, Mail, Mic } from 'lucide-react'
 import { useAppStore, type AppView } from '@/lib/store'
 
 interface GuideMessage {
@@ -18,13 +18,18 @@ interface GuideMessage {
 }
 
 export default function CareerGuide() {
-  const { careerContext, currentView, setCurrentView } = useAppStore()
+  const { careerContext, currentView, setCurrentView, savedDocuments } = useAppStore()
   const [isOpen, setIsOpen] = useState(false)
   const [dismissedMessages, setDismissedMessages] = useState<Set<string>>(new Set())
 
   // Determine contextual messages based on career progress
   const messages = useMemo<GuideMessage[]>(() => {
     const msgs: GuideMessage[] = []
+
+    // Document counts
+    const resumeDocs = savedDocuments.filter((d: any) => d.type === 'resume').length
+    const letterDocs = savedDocuments.filter((d: any) => d.type === 'cover-letter').length
+    const interviewDocs = savedDocuments.filter((d: any) => d.type === 'interview').length
 
     // Context depends on what the user has completed and current view
     if (!careerContext.resumeCompleted && currentView === 'dashboard') {
@@ -45,7 +50,7 @@ export default function CareerGuide() {
         icon: <Sparkles className="w-4 h-4" />,
         title: 'Great resume! Now add a cover letter',
         description: careerContext.resumeJobTitle
-          ? `A cover letter for your ${careerContext.resumeJobTitle} role will make your application stand out.`
+          ? `A cover letter for your ${careerContext.resumeJobTitle} role${careerContext.resumeCompany ? ` at ${careerContext.resumeCompany}` : ''} will make your application stand out.`
           : "A tailored cover letter makes your application 50% more likely to get noticed.",
         action: { label: 'Create Cover Letter', view: 'cover-letter' },
       })
@@ -58,7 +63,7 @@ export default function CareerGuide() {
         icon: <MessageCircle className="w-4 h-4" />,
         title: 'Ready for interview practice?',
         description: careerContext.resumeJobTitle
-          ? `Practice answering questions for a ${careerContext.resumeJobTitle} role at ${careerContext.resumeCompany || 'your target company'}.`
+          ? `Practice answering questions for a ${careerContext.resumeJobTitle} role at ${careerContext.resumeCompany || 'your target company'}. Your interviewer will know your background!`
           : "Practice makes perfect! Build confidence with a mock interview.",
         action: { label: 'Start Interview', view: 'interview' },
       })
@@ -75,6 +80,18 @@ export default function CareerGuide() {
       })
     }
 
+    // Document-specific cues — show when user has saved docs but hasn't moved forward
+    if (resumeDocs > 0 && !careerContext.resumeCompleted && currentView === 'documents') {
+      msgs.push({
+        id: 'resume-saved-next',
+        type: 'next-step',
+        icon: <Sparkles className="w-4 h-4" />,
+        title: 'Resume saved! Keep the momentum',
+        description: "You've saved a resume. Next step: write a cover letter tailored to your target role.",
+        action: { label: 'Create Cover Letter', view: 'cover-letter' },
+      })
+    }
+
     // View-specific tips
     if (currentView === 'resume' && !careerContext.resumeCompleted) {
       msgs.push({
@@ -83,6 +100,16 @@ export default function CareerGuide() {
         icon: <Sparkles className="w-4 h-4" />,
         title: 'Resume tip',
         description: "Use the AI suggestions to improve your summary and skills. A targeted resume gets more interviews!",
+      })
+    }
+
+    if (currentView === 'resume-analyzer') {
+      msgs.push({
+        id: 'analyzer-tip',
+        type: 'tip',
+        icon: <Sparkles className="w-4 h-4" />,
+        title: 'After analysis',
+        description: "Once you see your results, click 'Use Improved Resume' to load the AI-polished version into the builder. It auto-saves to My Docs!",
       })
     }
 
@@ -97,17 +124,65 @@ export default function CareerGuide() {
     }
 
     if (currentView === 'interview' && careerContext.resumeCompleted) {
+      const expText = careerContext.resumeExperience?.length === 0
+        ? "Your interviewer knows you're new to this field and will focus on transferable skills and motivation."
+        : `Your interviewer knows your background as a ${careerContext.resumeJobTitle}${careerContext.resumeCompany ? ` at ${careerContext.resumeCompany}` : ''} and will ask relevant questions.`
+
       msgs.push({
         id: 'interview-context',
         type: 'tip',
         icon: <Sparkles className="w-4 h-4" />,
         title: 'Interview tailored to you',
-        description: `Your interviewer knows your background as a ${careerContext.resumeJobTitle}${careerContext.resumeCompany ? ` at ${careerContext.resumeCompany}` : ''} and will ask relevant questions.`,
+        description: expText,
+      })
+    }
+
+    if (currentView === 'interview' && careerContext.coverLetterCompleted && !careerContext.resumeCompleted) {
+      msgs.push({
+        id: 'interview-cl-context',
+        type: 'tip',
+        icon: <Mail className="w-4 h-4" />,
+        title: 'Using cover letter context',
+        description: `Your interviewer will use your cover letter for ${careerContext.coverLetterJobTitle} at ${careerContext.coverLetterCompany} to tailor questions.`,
+      })
+    }
+
+    // My Documents view tips
+    if (currentView === 'documents') {
+      if (savedDocuments.length === 0) {
+        msgs.push({
+          id: 'docs-empty',
+          type: 'motivation',
+          icon: <ArrowRight className="w-4 h-4" />,
+          title: 'Start creating documents',
+          description: "Your saved resumes, cover letters, and interview results will appear here. Build a resume to get started!",
+          action: { label: 'Build Resume', view: 'resume' },
+        })
+      } else {
+        msgs.push({
+          id: 'docs-tip',
+          type: 'tip',
+          icon: <FolderOpen className="w-4 h-4" />,
+          title: 'Your document vault',
+          description: `You have ${resumeDocs} resume${resumeDocs !== 1 ? 's' : ''}, ${letterDocs} cover letter${letterDocs !== 1 ? 's' : ''}, and ${interviewDocs} interview${interviewDocs !== 1 ? 's' : ''} saved. Click any to view details or load into an editor.`,
+        })
+      }
+    }
+
+    // Motivation messages
+    if (currentView === 'dashboard' && careerContext.resumeCompleted && careerContext.coverLetterCompleted && careerContext.interviewCompleted) {
+      msgs.push({
+        id: 'all-complete-motivation',
+        type: 'motivation',
+        icon: <Sparkles className="w-4 h-4" />,
+        title: 'You\'re on fire! 🔥',
+        description: "You've completed the full career prep journey. Try a new role or practice more interviews to sharpen your skills.",
+        action: { label: 'View Documents', view: 'documents' },
       })
     }
 
     return msgs
-  }, [careerContext, currentView])
+  }, [careerContext, currentView, savedDocuments])
 
   // Auto-show the guide when there are new messages
   useEffect(() => {
