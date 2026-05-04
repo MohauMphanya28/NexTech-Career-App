@@ -120,8 +120,8 @@ const INTERVIEWERS: InterviewerProfile[] = [
     title: 'The Coach',
     description: 'Warm and natural. The most human-sounding coach for building real confidence.',
     voice: 'douji',
-    speed: 1.3,
-    volume: 1.0,
+    speed: 1.15,
+    volume: 0.9,
     accentColor: 'text-teal-400',
     accentBg: 'bg-teal-400/15',
     accentBorder: 'border-teal-400/60',
@@ -163,10 +163,10 @@ const INTERVIEWERS: InterviewerProfile[] = [
     id: 'james',
     name: 'James',
     title: 'The Executive',
-    description: 'Sharp and commanding. A British-accented voice for high-stakes executive interviews.',
+    description: 'Sharp and commanding. A deep, authoritative voice for high-stakes executive interviews.',
     voice: 'jam',
-    speed: 1.35,
-    volume: 1.1,
+    speed: 1.1,
+    volume: 0.85,
     accentColor: 'text-violet-400',
     accentBg: 'bg-violet-400/15',
     accentBorder: 'border-violet-400/60',
@@ -180,8 +180,8 @@ const INTERVIEWERS: InterviewerProfile[] = [
     title: 'The Motivator',
     description: 'Energetic and expressive. A passionate voice that fires you up to do your best.',
     voice: 'luodo',
-    speed: 1.4,
-    volume: 1.2,
+    speed: 1.15,
+    volume: 0.9,
     accentColor: 'text-rose-400',
     accentBg: 'bg-rose-400/15',
     accentBorder: 'border-rose-400/60',
@@ -591,6 +591,12 @@ export default function InterviewCoach() {
   // Interviewer state
   const [selectedInterviewer, setSelectedInterviewer] = useState<InterviewerProfile>(INTERVIEWERS[0])
 
+  // End interview confirmation dialog
+  const [showEndConfirm, setShowEndConfirm] = useState(false)
+
+  // Restart with settings panel (on results screen)
+  const [showRestartSettings, setShowRestartSettings] = useState(false)
+
   // Audio unlock ref for autoplay policy
   const audioContextRef = useRef<AudioContext | null>(null)
 
@@ -726,8 +732,9 @@ export default function InterviewCoach() {
 
       const audioUrl = URL.createObjectURL(audioBlob)
       const audio = new Audio(audioUrl)
-      // Slightly speed up playback for more natural, human-like speech pace
-      audio.playbackRate = 1.05
+      // Use a natural playback rate — no artificial speed-up since the TTS speed
+      // parameter already controls the pace. Over-acceleration causes robotic sound.
+      audio.playbackRate = 1.0
       currentAudioRef.current = audio
 
       audio.onended = () => {
@@ -1298,6 +1305,7 @@ export default function InterviewCoach() {
   const handleEndInterview = () => {
     stopTTS()
     stopRecording()
+    setShowEndConfirm(false)
 
     const overallScore = Math.round(
       ((liveScores.relevance + liveScores.clarity + liveScores.confidence) / 3) * 10
@@ -1376,6 +1384,8 @@ export default function InterviewCoach() {
     setLiveScores({ relevance: 0, clarity: 0, confidence: 0 })
     setResults(null)
     setShowReview(false)
+    setShowEndConfirm(false)
+    setShowRestartSettings(false)
     setInterviewSession(null)
     setIsRecording(false)
     setIsAiSpeaking(false)
@@ -1941,8 +1951,130 @@ export default function InterviewCoach() {
             whileTap={{ scale: 0.98 }}
           >
             <RotateCcw className="size-4" />
-            Practice Again
+            Practice Again (Same Settings)
           </motion.button>
+
+          <motion.button
+            onClick={() => setShowRestartSettings(!showRestartSettings)}
+            className="flex w-full items-center justify-center gap-3 rounded-2xl border border-teal-400/40 bg-teal-400/10 px-6 py-4 text-base font-medium text-teal-400 transition-all hover:bg-teal-400/15 active:scale-[0.98]"
+            whileTap={{ scale: 0.98 }}
+          >
+            <svg className="size-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.066 2.573c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.573 1.066c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.066-2.573c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+              <path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+            </svg>
+            Customize &amp; Restart
+            <svg
+              className={`size-4 transition-transform duration-200 ${showRestartSettings ? 'rotate-180' : ''}`}
+              fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}
+            >
+              <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
+            </svg>
+          </motion.button>
+
+          {/* Restart Settings Panel */}
+          <AnimatePresence>
+            {showRestartSettings && (
+              <motion.div
+                className="overflow-hidden rounded-2xl border border-border/30 bg-secondary/30"
+                initial={{ height: 0, opacity: 0 }}
+                animate={{ height: 'auto', opacity: 1 }}
+                exit={{ height: 0, opacity: 0 }}
+                transition={{ duration: 0.3, ease: 'easeInOut' }}
+              >
+                <div className="flex flex-col gap-4 p-4">
+                  {/* Question Count */}
+                  <div>
+                    <label className="mb-2 block text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                      Number of Questions
+                    </label>
+                    <div className="flex gap-2">
+                      {QUESTION_COUNTS.map((count) => {
+                        const isSelected = questionCount === count
+                        return (
+                          <button
+                            key={count}
+                            onClick={() => setQuestionCount(count)}
+                            className={`
+                              flex size-10 items-center justify-center rounded-xl text-sm font-bold
+                              transition-all duration-200 active:scale-[0.95]
+                              ${
+                                isSelected
+                                  ? 'border border-teal-400/60 bg-teal-400/15 text-teal-400'
+                                  : 'border border-border/50 bg-secondary/40 text-foreground/60 hover:border-border hover:bg-secondary/60'
+                              }
+                            `}
+                          >
+                            {count}
+                          </button>
+                        )
+                      })}
+                    </div>
+                  </div>
+
+                  {/* Interviewer Selection */}
+                  <div>
+                    <label className="mb-2 block text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                      Interviewer
+                    </label>
+                    <div className="flex flex-col gap-2">
+                      {INTERVIEWERS.map((interviewer) => {
+                        const isSelected = selectedInterviewer.id === interviewer.id
+                        return (
+                          <button
+                            key={interviewer.id}
+                            onClick={() => setSelectedInterviewer(interviewer)}
+                            className={`
+                              flex items-center gap-3 rounded-xl p-2.5 text-left
+                              transition-all duration-200 active:scale-[0.98]
+                              ${
+                                isSelected
+                                  ? `border ${interviewer.accentBorder} ${interviewer.accentBg}`
+                                  : 'border border-border/30 bg-secondary/20 hover:bg-secondary/40'
+                              }
+                            `}
+                          >
+                            <div className={`flex size-8 shrink-0 items-center justify-center rounded-full bg-gradient-to-br ${interviewer.avatarGradient} shadow-md`}>
+                              <span className="text-[10px] font-bold text-white">{interviewer.initials}</span>
+                            </div>
+                            <div className="flex-1 min-w-0">
+                              <div className="flex items-center gap-1.5">
+                                <span className={`text-xs font-bold ${isSelected ? interviewer.accentColor : 'text-foreground'}`}>
+                                  {interviewer.name}
+                                </span>
+                                <span className="text-[10px] text-muted-foreground">{interviewer.title}</span>
+                              </div>
+                            </div>
+                            {isSelected && (
+                              <div className={`flex size-5 shrink-0 items-center justify-center rounded-full ${interviewer.accentBg}`}>
+                                <svg className={`size-3 ${interviewer.accentColor}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
+                                  <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                                </svg>
+                              </div>
+                            )}
+                          </button>
+                        )
+                      })}
+                    </div>
+                  </div>
+
+                  {/* Start with new settings */}
+                  <motion.button
+                    onClick={() => {
+                      setShowRestartSettings(false)
+                      handleReset()
+                      // handleReset sets mode to 'setup', which will use the updated questionCount and selectedInterviewer
+                    }}
+                    className="flex w-full items-center justify-center gap-2 rounded-2xl bg-teal-500 px-4 py-3 text-sm font-bold text-white transition-colors hover:bg-teal-400 active:scale-[0.98]"
+                    whileTap={{ scale: 0.98 }}
+                  >
+                    <Phone className="size-4" />
+                    Start Interview with These Settings
+                  </motion.button>
+                </div>
+              </motion.div>
+            )}
+          </AnimatePresence>
 
           <motion.button
             onClick={() => setShowReview(true)}
@@ -2010,12 +2142,13 @@ export default function InterviewCoach() {
             </Badge>
             {/* End Call Button */}
             <motion.button
-              onClick={handleEndInterview}
-              className="flex size-9 items-center justify-center rounded-xl bg-red-500/15 text-red-400 transition-colors hover:bg-red-500/25"
+              onClick={() => setShowEndConfirm(true)}
+              className="flex items-center gap-1.5 rounded-xl bg-red-500/15 px-3 py-1.5 text-xs font-semibold text-red-400 transition-colors hover:bg-red-500/25"
               whileTap={{ scale: 0.9 }}
               aria-label="End interview"
             >
-              <PhoneOff className="size-4" />
+              <PhoneOff className="size-3.5" />
+              End
             </motion.button>
           </div>
         </div>
@@ -2420,6 +2553,63 @@ export default function InterviewCoach() {
           </motion.p>
         )}
       </div>
+
+      {/* ─── End Interview Confirmation Dialog ────────────────────────── */}
+      <AnimatePresence>
+        {showEndConfirm && (
+          <motion.div
+            className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 px-6 backdrop-blur-sm"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            onClick={() => setShowEndConfirm(false)}
+          >
+            <motion.div
+              className="w-full max-w-sm overflow-hidden rounded-3xl border border-border/30 bg-background shadow-2xl"
+              initial={{ scale: 0.9, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.9, opacity: 0 }}
+              transition={{ type: 'spring', damping: 25, stiffness: 300 }}
+              onClick={(e) => e.stopPropagation()}
+            >
+              {/* Dialog Header */}
+              <div className="flex flex-col items-center gap-3 px-6 pb-4 pt-8">
+                <div className="flex size-16 items-center justify-center rounded-full bg-red-500/15">
+                  <PhoneOff className="size-7 text-red-400" />
+                </div>
+                <h3 className="text-lg font-bold text-foreground">End Interview?</h3>
+                <p className="text-center text-sm text-muted-foreground">
+                  {currentQuestionNum > 1
+                    ? `You've answered ${currentQuestionNum - 1} of ${questionCount} questions. You'll still get your scores for the answers you've given.`
+                    : "You haven't answered any questions yet. You'll get a chance to restart after ending."}
+                </p>
+              </div>
+
+              {/* Dialog Actions */}
+              <div className="flex flex-col gap-2 px-6 pb-6 pt-2">
+                <motion.button
+                  onClick={() => {
+                    setShowEndConfirm(false)
+                    handleEndInterview()
+                  }}
+                  className="flex w-full items-center justify-center gap-2 rounded-2xl bg-red-500 px-4 py-3 text-sm font-bold text-white transition-colors hover:bg-red-400 active:scale-[0.98]"
+                  whileTap={{ scale: 0.98 }}
+                >
+                  <PhoneOff className="size-4" />
+                  Yes, End Interview
+                </motion.button>
+                <motion.button
+                  onClick={() => setShowEndConfirm(false)}
+                  className="flex w-full items-center justify-center gap-2 rounded-2xl border border-border/50 bg-secondary/40 px-4 py-3 text-sm font-medium text-foreground/80 transition-colors hover:bg-secondary/60 active:scale-[0.98]"
+                  whileTap={{ scale: 0.98 }}
+                >
+                  Continue Interview
+                </motion.button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </motion.div>
   )
 }

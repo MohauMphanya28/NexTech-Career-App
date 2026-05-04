@@ -419,3 +419,44 @@ Stage Summary:
 - Volume distortion eliminated: reduced from 1.5-2.5 range to 0.9-1.2 range
 - All artificial delays removed for more responsive conversation flow
 - TTS text preprocessing adds natural micro-pauses at transition points
+
+---
+Task ID: 15
+Agent: Main Orchestrator
+Task: Fix robotic child voice for Kazi/James/Zanele, add End Interview confirmation dialog, add restart-with-settings feature
+
+Work Log:
+- **Fixed robotic child voices for Kazi, James, and Zanele**:
+  - Root cause: Speed values 1.3-1.4 and volume values 1.0-1.2 were too high, causing the TTS engine to produce distorted, high-pitched, child-like speech
+  - The voices that sounded good (Thabo speed=1.2 volume=0.9, Naledi speed=1.25 volume=1.0) used lower parameters
+  - Kazi: speed 1.3→1.15, volume 1.0→0.9
+  - James: speed 1.35→1.1, volume 1.1→0.85
+  - Zanele: speed 1.4→1.15, volume 1.2→0.9
+  - Removed client-side playbackRate boost (1.05→1.0) — the TTS speed parameter already controls pace, and over-acceleration causes robotic sound
+
+- **Added End Interview confirmation dialog**:
+  - Replaced small PhoneOff icon button with a more visible "End" button with text label
+  - Added a modal confirmation dialog that shows:
+    - Clear "End Interview?" heading with red PhoneOff icon
+    - Contextual message: how many questions answered out of total
+    - Two buttons: "Yes, End Interview" (red) and "Continue Interview" (neutral)
+  - Clicking outside the dialog dismisses it (backdrop click handler)
+  - Spring animation for dialog entrance/exit
+  - Added `showEndConfirm` state, reset in `handleEndInterview` and `handleReset`
+
+- **Added "Customize & Restart" feature on results screen**:
+  - Added "Practice Again (Same Settings)" button — instantly restarts with same interviewer/question count
+  - Added "Customize & Restart" expandable panel with:
+    - Question count selector (3/5/7/10)
+    - Interviewer selection cards (same as setup screen but compact)
+    - "Start Interview with These Settings" button
+  - Animated expand/collapse with AnimatePresence
+  - Added `showRestartSettings` state, reset in `handleReset`
+  - Settings persist when going to setup screen via Customize & Restart
+
+Stage Summary:
+- Kazi, James, and Zanele voices now use lower speed (1.1-1.15) and volume (0.85-0.9) to match Thabo/Naledi quality
+- Removed playbackRate boost that was adding to the robotic effect
+- End Interview now has a clear confirmation dialog — no accidental endings
+- Results screen offers both quick restart (same settings) and customized restart (change questions/interviewer)
+- All changes compile and pass lint checks
