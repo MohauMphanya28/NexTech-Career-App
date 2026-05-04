@@ -787,11 +787,12 @@ export default function InterviewCoach() {
         oldAudio.pause()
       }
 
-      // NOTE: We do NOT set isAiSpeaking=true here — the TTS fetch takes 2-6s
-      // and we don't want to show "speaking" state before audio is actually playing.
-      // The caller (handleStartInterview, sendAnswer) manages the "thinking" state
-      // via aiTyping while we wait for TTS. isAiSpeaking is set true only when
-      // audio.play() succeeds below.
+      // Set speaking state IMMEDIATELY — the user can already see the text response,
+      // so showing the speaking animation right away feels natural and eliminates
+      // the perceived delay. The TTS fetch takes 1-3s, but the visual feedback
+      // is instant.
+      setIsAiSpeaking(true)
+      setIsLoading(false)
 
       const res = await fetchWithRetry('/api/ai/tts', {
         method: 'POST',
@@ -807,6 +808,7 @@ export default function InterviewCoach() {
       if (!res.ok) {
         const errorData = await res.json().catch(() => ({}))
         console.error('TTS API error:', res.status, errorData)
+        setIsAiSpeaking(false)
         return // Graceful degradation — interview continues without audio
       }
 
@@ -815,6 +817,7 @@ export default function InterviewCoach() {
       // Validate the blob is actual audio data
       if (audioBlob.size < 100) {
         console.error('TTS returned empty/too-small audio blob:', audioBlob.size, 'bytes')
+        setIsAiSpeaking(false)
         return
       }
 
@@ -854,13 +857,12 @@ export default function InterviewCoach() {
       // a new TTS call interrupts this one). This is expected, not an error.
       try {
         await audio.play()
-        // ✅ Audio is NOW actually playing — show "speaking" state
-        setIsAiSpeaking(true)
+        // Audio is now playing — isAiSpeaking was already set true above
       } catch (playError: unknown) {
         const err = playError as DOMException
         if (err.name === 'AbortError') {
           // Audio was interrupted by pause() — this is normal (e.g., user started recording)
-          // Don't update state since the audio was intentionally stopped
+          setIsAiSpeaking(false)
           return
         }
         // Re-throw unexpected errors
@@ -901,13 +903,8 @@ export default function InterviewCoach() {
     isMutedRef.current = isMuted
   }, [isMuted])
 
-  // When audio actually starts playing, clear isLoading (but NOT aiTyping —
-  // that should already be cleared when the LLM response text arrives)
-  useEffect(() => {
-    if (isAiSpeaking) {
-      setIsLoading(false)
-    }
-  }, [isAiSpeaking])
+  // isLoading is now cleared directly in playTTS when isAiSpeaking is set true,
+  // so no separate useEffect is needed.
 
   // ─── Voice Recording ─────────────────────────────────────────────────
 
