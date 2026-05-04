@@ -489,3 +489,34 @@ Stage Summary:
 - The "robotic child" problem is eliminated because xiaochen and tongtong are the only voices that produce natural English output from this Chinese TTS API
 - Male-presenting interviewers (Kazi, Thabo, James) use xiaochen at different speeds
 - Female-presenting interviewers (Naledi, Zanele) use tongtong at different speeds
+
+---
+Task ID: 17
+Agent: Main Orchestrator
+Task: Change favicon/tab icon to NexTech company logo and update URL metadata to custom company domain
+
+Work Log:
+- Investigated current app state: server running but intermittent crashes (OOM during compile)
+- Found current favicon was `/logo.svg` (Z.ai logo, not NexTech logo)
+- Updated `src/app/layout.tsx` metadata:
+  - Changed favicon from `/logo.svg` to `/nextech-icon.png` (the NexTech company logo)
+  - Added multi-size icon links: 32x32, 192x192, and 180x180 Apple Touch Icon
+  - Added `metadataBase: new URL("https://nextechcareer.co.za")` — custom company URL
+  - Updated page title to use template pattern: "NexTech Career | AI-Powered Career Platform for SA Youth"
+  - Added full OpenGraph metadata with locale en_ZA, site URL, hero image
+  - Added Twitter card metadata with summary_large_image
+  - Added canonical URL pointing to https://nextechcareer.co.za
+  - Added author URL, creator, and publisher metadata
+- Verified all changes in compiled HTML output:
+  - Title: "NexTech Career | AI-Powered Career Platform for SA Youth"
+  - Favicon: /nextech-icon.png (32x32, 192x192, 180x180)
+  - OG URL: https://nextechcareer.co.za
+  - Canonical: https://nextechcareer.co.za
+  - Author URL: https://nextechcareer.co.za
+
+Stage Summary:
+- Browser tab now shows NexTech company logo (nextech-icon.png) instead of Z.ai logo
+- Page title updated to "NexTech Career | AI-Powered Career Platform for SA Youth"
+- Custom domain https://nextechcareer.co.za set in metadata (OG URL, canonical, author)
+- Full OpenGraph and Twitter card metadata for professional link sharing
+- South African locale (en_ZA) properly set in OG metadata
