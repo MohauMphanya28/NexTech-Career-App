@@ -212,10 +212,9 @@ export async function POST(req: NextRequest) {
     // Keep volume moderate — the browser can amplify if needed
     const clampedVolume = Math.max(0.1, Math.min(2.0, volume))
 
-    // Use mp3 format — most broadly supported and no header manipulation needed
-    // for concatenation (MP3 frames can be simply joined).
-    // Try mp3 first; if it fails, fall back to wav.
-    const formats = ['mp3', 'wav'] as const
+    // WAV format is the primary format — the TTS API reliably supports it.
+    // MP3 is listed as fallback but often fails with error 1214, so we try WAV first.
+    const formats = ['wav', 'mp3'] as const
     let lastFormatError: Error | null = null
 
     for (const fmt of formats) {

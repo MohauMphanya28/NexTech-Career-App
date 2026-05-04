@@ -389,7 +389,7 @@ export default function InterviewAvatar({
         >
           {/* Outer gradient border ring */}
           <div
-            className="absolute rounded-full"
+            className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 rounded-full"
             style={{
               width: imageSize,
               height: imageSize,
@@ -400,7 +400,7 @@ export default function InterviewAvatar({
           />
           {/* Inner image container — slightly smaller to reveal the gradient border behind it */}
           <div
-            className="absolute overflow-hidden"
+            className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 overflow-hidden"
             style={{
               width: imageSize - 6,
               height: imageSize - 6,
