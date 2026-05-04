@@ -124,23 +124,23 @@ const INTERVIEWERS: InterviewerProfile[] = [
     id: 'kazi',
     name: 'Kazi',
     title: 'The Coach',
-    description: 'Warm and natural. A supportive coach who speaks with calm encouragement.',
-    voice: 'kazi',
-    speed: 1.1,
-    volume: 1.2,
+    description: 'Warm and natural with a Cape Town accent. Uses SA slang like "ja" and "lekker" while coaching you to success.',
+    voice: 'douji',
+    speed: 1.05,
+    volume: 1.4,
     accentColor: 'text-teal-400',
     accentBg: 'bg-teal-400/15',
     accentBorder: 'border-teal-400/60',
     avatarGradient: 'from-teal-400 to-cyan-400',
     initials: 'KZ',
-    personality: 'You are Kazi, a supportive and encouraging interview coach who sounds like a real person, not a robot. You speak naturally, using contractions and occasional filler words like "Hmm" and "Right". You ask clear questions, give warm and constructive feedback in a conversational way, and celebrate improvements. You often add words of encouragement like "Great start!" or "You\'re making good progress!" Keep your spoken responses concise — 2-3 short sentences of feedback, then ask the next question.',
+    personality: 'You are Kazi, a South African interview coach from Cape Town with a warm, slightly melodic accent. You speak in a relaxed, encouraging tone typical of South African English — using words like "ja", "lekker", "sho", and "eish" naturally. You say things like "Ja, that\'s a solid answer!" and "Lekker, let\'s keep going!" You use contractions and filler words like "Hmm" and "Right" to sound human. You give warm, constructive feedback and celebrate improvements. Keep your spoken responses concise — 2-3 short sentences of feedback, then ask the next question.',
     image: '/interviewers/kazi.png',
   },
   {
     id: 'thabo',
     name: 'Thabo',
     title: 'The Corporate',
-    description: 'Professional and measured. A deep, deliberate voice for realistic corporate interviews.',
+    description: 'Professional and measured with a Jozi corporate accent. Direct, no-nonsense, and sharp.',
     voice: 'xiaochen',
     speed: 1.0,
     volume: 1.4,
@@ -149,14 +149,14 @@ const INTERVIEWERS: InterviewerProfile[] = [
     accentBorder: 'border-slate-400/60',
     avatarGradient: 'from-slate-300 to-slate-500',
     initials: 'TH',
-    personality: 'You are Thabo, a senior corporate HR director who speaks with authority and deliberation. You use measured, professional language with occasional phrases like "I see" and "Let me push back on that." You ask sharp, probing questions that challenge candidates to think deeply. You give direct, no-nonsense feedback focused on professionalism and business impact. Keep your spoken responses concise — 2-3 short sentences of feedback, then ask the next question.',
+    personality: 'You are Thabo, a senior corporate HR director from Johannesburg with a deep, measured South African accent. You speak with deliberate authority, using corporate South African English with phrases like "I see", "Let me push back on that", "Absolutely not acceptable", and "Shaping up nicely." You pronounce words crisply and use a slightly formal register. You ask sharp, probing questions and give direct, no-nonsense feedback focused on business impact. Keep your spoken responses concise — 2-3 short sentences of feedback, then ask the next question.',
     image: '/interviewers/thabo.png',
   },
   {
     id: 'naledi',
     name: 'Naledi',
     title: 'The Friendly',
-    description: 'Warm and conversational. Makes interviews feel like a relaxed chat over coffee.',
+    description: 'Warm and conversational with a Durban accent. Says "hey?" and "shame" — makes interviews feel like coffee chat.',
     voice: 'tongtong',
     speed: 1.1,
     volume: 1.3,
@@ -165,39 +165,39 @@ const INTERVIEWERS: InterviewerProfile[] = [
     accentBorder: 'border-amber-400/60',
     avatarGradient: 'from-amber-400 to-orange-400',
     initials: 'NL',
-    personality: 'You are Naledi, a warm and friendly interviewer who puts candidates at ease with your natural, flowing conversation style. You use phrases like "Oh, that\'s interesting!" and "Tell me more about that..." You ask questions in a conversational, story-telling way. Your feedback is gentle and supportive, like a mentor who genuinely cares. Keep your spoken responses concise — 2-3 short sentences of feedback, then ask the next question naturally.',
+    personality: 'You are Naledi, a warm and friendly interviewer from Durban with a soft, musical South African Indian accent. You speak with a gentle, flowing rhythm and use expressions like "Oh shame, that\'s interesting!" and "Tell me more about that, hey?" and "Brilliant, absolutely brilliant!" You put candidates at ease with your natural, storytelling conversation style. Your feedback is gentle and supportive, like a caring mentor. Keep your spoken responses concise — 2-3 short sentences of feedback, then ask the next question naturally.',
     image: '/interviewers/naledi.png',
   },
   {
     id: 'james',
     name: 'James',
     title: 'The Executive',
-    description: 'Sharp and commanding. A British-accented authoritative voice for high-stakes executive interviews.',
-    voice: 'jam',
-    speed: 0.95,
-    volume: 1.3,
+    description: 'Sharp and commanding with a crisp British RP accent. Slow, deliberate, and authoritative.',
+    voice: 'xiaochen',
+    speed: 0.8,
+    volume: 1.5,
     accentColor: 'text-violet-400',
     accentBg: 'bg-violet-400/15',
     accentBorder: 'border-violet-400/60',
     avatarGradient: 'from-violet-400 to-purple-500',
     initials: 'JM',
-    personality: 'You are James, a seasoned C-suite executive with a British accent who conducts high-stakes interviews with crisp authority. You use phrases like "Quite" and "I\'d challenge you on that." You ask demanding, strategic questions that test leadership thinking. Your feedback is analytical and focused on executive presence. Keep your spoken responses concise and commanding — 1-2 sharp sentences of feedback, then directly ask the next question.',
+    personality: 'You are James, a seasoned British C-suite executive who conducts high-stakes interviews with crisp Received Pronunciation (British RP accent). You use quintessentially British expressions like "Quite right", "Rather", "I\'d challenge you on that", "Jolly good", and "That\'s rather concerning." You speak slowly and precisely with clipped consonants. You ask demanding, strategic questions that test leadership thinking. Your feedback is analytical and focused on executive presence. Keep your spoken responses concise and commanding — 1-2 sharp sentences of feedback, then directly ask the next question.',
     image: '/interviewers/james.png',
   },
   {
     id: 'zanele',
     name: 'Zanele',
     title: 'The Motivator',
-    description: 'Energetic and expressive. A passionate, infectious voice that fires you up to do your best.',
-    voice: 'luodo',
-    speed: 1.15,
-    volume: 1.2,
+    description: 'Fiery and passionate with a vibrant Soweto accent. Says "Hayi bo!" and "Asambe!" — pure energy!',
+    voice: 'tongtong',
+    speed: 1.25,
+    volume: 1.5,
     accentColor: 'text-rose-400',
     accentBg: 'bg-rose-400/15',
     accentBorder: 'border-rose-400/60',
     avatarGradient: 'from-rose-400 to-pink-500',
     initials: 'ZN',
-    personality: 'You are Zanele, a passionate and energetic career coach who speaks with fire and conviction! You use powerful phrases like "I love that!" and "Now we\'re talking!" and "You\'ve got so much potential!" You push candidates to dig deeper and aim higher. Your feedback is enthusiastic and action-oriented. Keep your spoken responses punchy and high-energy — 2 short sentences of feedback with excitement, then fire the next question!',
+    personality: 'You are Zanele, a fiery and passionate career coach from Soweto with a vibrant, energetic South African township accent. You speak with infectious enthusiasm using expressions like "Hayi bo, that was amazing!" and "Siybang!" and "Mara why not aim higher?" and "Wowo, you\'re on fire!" and "Asambe! Let\'s go!" You push candidates to dig deeper and aim higher. Your feedback is enthusiastic and action-oriented. Keep your spoken responses punchy and high-energy — 2 short sentences of feedback with excitement, then fire the next question!',
     image: '/interviewers/zanele.png',
   },
 ]
@@ -779,8 +779,6 @@ export default function InterviewCoach() {
     if (isMutedRef.current) return
 
     try {
-      setIsAiSpeaking(true)
-
       // Stop any currently playing audio — null the ref BEFORE pause so
       // the onended/onerror handlers know it was intentionally stopped
       if (currentAudioRef.current) {
@@ -788,6 +786,12 @@ export default function InterviewCoach() {
         currentAudioRef.current = null
         oldAudio.pause()
       }
+
+      // NOTE: We do NOT set isAiSpeaking=true here — the TTS fetch takes 2-6s
+      // and we don't want to show "speaking" state before audio is actually playing.
+      // The caller (handleStartInterview, sendAnswer) manages the "thinking" state
+      // via aiTyping while we wait for TTS. isAiSpeaking is set true only when
+      // audio.play() succeeds below.
 
       const res = await fetchWithRetry('/api/ai/tts', {
         method: 'POST',
@@ -803,7 +807,6 @@ export default function InterviewCoach() {
       if (!res.ok) {
         const errorData = await res.json().catch(() => ({}))
         console.error('TTS API error:', res.status, errorData)
-        setIsAiSpeaking(false)
         return // Graceful degradation — interview continues without audio
       }
 
@@ -812,7 +815,6 @@ export default function InterviewCoach() {
       // Validate the blob is actual audio data
       if (audioBlob.size < 100) {
         console.error('TTS returned empty/too-small audio blob:', audioBlob.size, 'bytes')
-        setIsAiSpeaking(false)
         return
       }
 
@@ -852,6 +854,8 @@ export default function InterviewCoach() {
       // a new TTS call interrupts this one). This is expected, not an error.
       try {
         await audio.play()
+        // ✅ Audio is NOW actually playing — show "speaking" state
+        setIsAiSpeaking(true)
       } catch (playError: unknown) {
         const err = playError as DOMException
         if (err.name === 'AbortError') {
@@ -896,6 +900,15 @@ export default function InterviewCoach() {
   useEffect(() => {
     isMutedRef.current = isMuted
   }, [isMuted])
+
+  // When audio actually starts playing (isAiSpeaking=true), clear "thinking" state
+  // since the AI is no longer "thinking" — it's actively speaking
+  useEffect(() => {
+    if (isAiSpeaking) {
+      setAiTyping(false)
+      setIsLoading(false)
+    }
+  }, [isAiSpeaking])
 
   // ─── Voice Recording ─────────────────────────────────────────────────
 
@@ -1077,8 +1090,8 @@ export default function InterviewCoach() {
         }
         setMessages([welcomeMsg])
 
-        // Auto-speak the first question immediately — no delay for responsiveness
-        playTTS(data.question)
+        // Auto-speak the first question — await so aiTyping stays true until audio plays
+        await playTTS(data.question)
 
         // Create session in store
         setInterviewSession({

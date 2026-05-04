@@ -215,7 +215,6 @@ export default function InterviewAvatar({
 
   // Image size (circular crop area)
   const imageSize = size * 0.88
-  const imageOffset = (size - imageSize) / 2
 
   // ─────────────────────────────────────────────────────────────────────────
   // AUDIO ANALYSIS: Web Audio API → AnalyserNode → RMS amplitude
@@ -330,133 +329,125 @@ export default function InterviewAvatar({
   return (
     <div
       className="relative flex flex-col items-center"
-      style={{ width: size, height: size + 44 }}
+      style={{ width: size }}
     >
-      {/* ── Outer Glow / Aura when speaking ── */}
-      <AnimatePresence>
-        {isSpeaking && (
-          <motion.div
-            className="absolute rounded-full"
-            style={{
-              width: size * 1.15,
-              height: size * 1.15,
-              top: -size * 0.075,
-              left: -size * 0.075,
-              background: `radial-gradient(circle, ${palette.accentGlow} 0%, transparent 70%)`,
-              filter: 'blur(25px)',
-            }}
-            initial={{ opacity: 0, scale: 0.9 }}
-            animate={{
-              opacity: [0.2, 0.5, 0.2],
-              scale: [1, 1.04, 1],
-            }}
-            exit={{ opacity: 0, scale: 0.9 }}
-            transition={{
-              opacity: { duration: 1.5, repeat: Infinity, ease: 'easeInOut' },
-              scale: { duration: 1.5, repeat: Infinity, ease: 'easeInOut' },
-            }}
-          />
-        )}
-      </AnimatePresence>
-
-      {/* ── Speaking Pulse Rings ── */}
-      <AnimatePresence>
-        {isSpeaking && (
-          <motion.div
-            className="absolute"
-            style={{ width: size, height: size, top: 0, left: 0 }}
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-          >
-            <SpeakingPulseRing
-              size={size}
-              color1={palette.ringColor1}
-              color2={palette.ringColor2}
+      {/* ── Avatar Container (circle with image) ── */}
+      <div className="relative" style={{ width: size, height: size }}>
+        {/* ── Outer Glow / Aura when speaking ── */}
+        <AnimatePresence>
+          {isSpeaking && (
+            <motion.div
+              className="absolute rounded-full"
+              style={{
+                inset: -size * 0.075,
+                background: `radial-gradient(circle, ${palette.accentGlow} 0%, transparent 70%)`,
+                filter: 'blur(25px)',
+              }}
+              initial={{ opacity: 0, scale: 0.9 }}
+              animate={{
+                opacity: [0.2, 0.5, 0.2],
+                scale: [1, 1.04, 1],
+              }}
+              exit={{ opacity: 0, scale: 0.9 }}
+              transition={{
+                opacity: { duration: 1.5, repeat: Infinity, ease: 'easeInOut' },
+                scale: { duration: 1.5, repeat: Infinity, ease: 'easeInOut' },
+              }}
             />
-          </motion.div>
-        )}
-      </AnimatePresence>
+          )}
+        </AnimatePresence>
 
-      {/* ── Main 3D Face Image ── */}
-      <motion.div
-        className="relative z-10"
-        style={{
-          width: imageSize,
-          height: imageSize,
-          borderRadius: '50%',
-          overflow: 'hidden',
-          top: imageOffset,
-          left: imageOffset,
-        }}
-        animate={isSpeaking ? {
-          scale: [1, 1.01 + amplitude * 0.015, 1],
-        } : { scale: 1 }}
-        transition={
-          isSpeaking
-            ? { duration: 2, repeat: Infinity, ease: 'easeInOut' }
-            : { duration: 0.3 }
-        }
-      >
-        {/* Circular clip with gradient border */}
-        <div
-          className="relative size-full"
-          style={{
-            borderRadius: '50%',
-            padding: '3px',
-            background: isSpeaking
-              ? `linear-gradient(135deg, ${palette.ringColor1}, ${palette.ringColor2})`
-              : 'linear-gradient(135deg, rgba(255,255,255,0.1), rgba(255,255,255,0.05))',
-          }}
+        {/* ── Speaking Pulse Rings ── */}
+        <AnimatePresence>
+          {isSpeaking && (
+            <motion.div
+              className="absolute inset-0"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+            >
+              <SpeakingPulseRing
+                size={size}
+                color1={palette.ringColor1}
+                color2={palette.ringColor2}
+              />
+            </motion.div>
+          )}
+        </AnimatePresence>
+
+        {/* ── Main 3D Face Image ── */}
+        <motion.div
+          className="absolute inset-0 z-10 flex items-center justify-center"
+          animate={isSpeaking ? {
+            scale: [1, 1.01 + amplitude * 0.015, 1],
+          } : { scale: 1 }}
+          transition={
+            isSpeaking
+              ? { duration: 2, repeat: Infinity, ease: 'easeInOut' }
+              : { duration: 0.3 }
+          }
         >
           <div
-            className="relative size-full overflow-hidden"
-            style={{ borderRadius: '50%' }}
+            className="relative"
+            style={{
+              width: imageSize,
+              height: imageSize,
+              borderRadius: '50%',
+              padding: '3px',
+              background: isSpeaking
+                ? `linear-gradient(135deg, ${palette.ringColor1}, ${palette.ringColor2})`
+                : 'linear-gradient(135deg, rgba(255,255,255,0.15), rgba(255,255,255,0.05))',
+            }}
           >
-            <Image
-              src={interviewer.image}
-              alt={`${interviewer.name} - ${interviewer.title}`}
-              fill
-              className="object-cover object-top"
-              priority
-              sizes={`${Math.round(imageSize)}px`}
-            />
+            <div
+              className="relative size-full overflow-hidden"
+              style={{ borderRadius: '50%' }}
+            >
+              <Image
+                src={interviewer.image}
+                alt={`${interviewer.name} - ${interviewer.title}`}
+                fill
+                className="object-cover object-center"
+                priority
+                sizes={`${Math.round(imageSize)}px`}
+              />
 
-            {/* ── Speaking overlay: subtle lower-face glow ── */}
-            <AnimatePresence>
-              {isSpeaking && amplitude > 0.05 && (
+              {/* ── Speaking overlay: subtle lower-face glow ── */}
+              <AnimatePresence>
+                {isSpeaking && amplitude > 0.05 && (
+                  <motion.div
+                    className="absolute inset-0"
+                    style={{
+                      borderRadius: '50%',
+                      background: `radial-gradient(ellipse 60% 35% at 50% 70%, ${palette.accentGlow} 0%, transparent 70%)`,
+                    }}
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: amplitude * 0.6 }}
+                    exit={{ opacity: 0 }}
+                    transition={{ duration: 0.15 }}
+                  />
+                )}
+              </AnimatePresence>
+
+              {/* ── Idle: subtle breathing overlay ── */}
+              {!isSpeaking && (
                 <motion.div
                   className="absolute inset-0"
                   style={{
                     borderRadius: '50%',
-                    background: `radial-gradient(ellipse 60% 35% at 50% 70%, ${palette.accentGlow} 0%, transparent 70%)`,
+                    background: 'radial-gradient(ellipse 80% 80% at 50% 50%, rgba(255,255,255,0.02) 0%, transparent 70%)',
                   }}
-                  initial={{ opacity: 0 }}
-                  animate={{ opacity: amplitude * 0.6 }}
-                  exit={{ opacity: 0 }}
-                  transition={{ duration: 0.15 }}
+                  animate={{ opacity: [0, 1, 0] }}
+                  transition={{ duration: 4, repeat: Infinity, ease: 'easeInOut' }}
                 />
               )}
-            </AnimatePresence>
-
-            {/* ── Idle: subtle breathing overlay ── */}
-            {!isSpeaking && (
-              <motion.div
-                className="absolute inset-0"
-                style={{
-                  borderRadius: '50%',
-                  background: 'radial-gradient(ellipse 80% 80% at 50% 50%, rgba(255,255,255,0.02) 0%, transparent 70%)',
-                }}
-                animate={{ opacity: [0, 1, 0] }}
-                transition={{ duration: 4, repeat: Infinity, ease: 'easeInOut' }}
-              />
-            )}
+            </div>
           </div>
-        </div>
-      </motion.div>
+        </motion.div>
+      </div>
 
       {/* ── Audio Wave Visualizer (below face) ── */}
-      <div className="relative z-10 -mt-6">
+      <div className="relative z-10 -mt-5">
         <AudioWaveBars
           isActive={isSpeaking}
           color={palette.waveColor}
