@@ -14,6 +14,10 @@ import {
   Zap,
   Search,
   FolderOpen,
+  Sun,
+  Moon,
+  CloudSun,
+  Rocket,
 } from 'lucide-react'
 import { useAppStore, type AppView } from '@/lib/store'
 import { Button } from '@/components/ui/button'
@@ -112,16 +116,38 @@ const itemVariants = {
   },
 }
 
+// Time-of-day greeting helper
+function getGreeting(): { text: string; icon: React.ReactNode } {
+  const hour = new Date().getHours()
+  if (hour >= 5 && hour < 12) {
+    return { text: 'Good morning', icon: <Sun className="size-5 text-amber-400" /> }
+  } else if (hour >= 12 && hour < 17) {
+    return { text: 'Good afternoon', icon: <CloudSun className="size-5 text-orange-400" /> }
+  } else {
+    return { text: 'Good evening', icon: <Moon className="size-5 text-indigo-300" /> }
+  }
+}
+
+// Career journey steps for progress indicator
+const journeySteps = [
+  { label: 'Resume', key: 'resumeCompleted' },
+  { label: 'Letter', key: 'coverLetterCompleted' },
+  { label: 'Interview', key: 'interviewCompleted' },
+] as const
+
 export default function Dashboard() {
-  const { user, setCurrentView, resumes, interviewHistory } = useAppStore()
+  const { user, setCurrentView, resumes, interviewHistory, careerContext } = useAppStore()
 
   // Pick a rotating tip based on the day
   const tipIndex = new Date().getDate() % careerTips.length
   const todayTip = careerTips[tipIndex]
 
+  // Time-of-day greeting
+  const greeting = getGreeting()
+
   // Compute stats
   const resumeCount = resumes.length
-  const letterCount = 0 // Could be extended with cover letter history
+  const letterCount = 0
   const interviewCount = interviewHistory.length
   const avgScore =
     interviewCount > 0
@@ -130,42 +156,157 @@ export default function Dashboard() {
         )
       : 0
 
+  // Career journey progress
+  const completedSteps = [
+    careerContext.resumeCompleted,
+    careerContext.coverLetterCompleted,
+    careerContext.interviewCompleted,
+  ].filter(Boolean).length
+
+  const progressPercent = Math.round((completedSteps / 3) * 100)
+
   const hasOnboarded = user?.onboardingDone ?? false
 
   return (
     <motion.div
-      className="flex min-h-screen flex-col gap-6 px-4 pb-28 pt-6"
+      className="flex min-h-screen flex-col gap-6 px-4 pb-28 pt-4"
       variants={containerVariants}
       initial="hidden"
       animate="visible"
     >
-      {/* ─── Header ─── */}
-      <motion.header variants={itemVariants} className="flex flex-col gap-1">
-        <h1 className="gradient-text text-3xl font-bold tracking-tight">
-          NexTech
-        </h1>
-        <p className="text-sm text-muted-foreground">Your AI Career Mentor</p>
-        {user?.name && (
-          <p className="mt-1 text-base font-medium text-foreground/90">
-            Welcome back, <span className="text-teal-400">{user.name}</span> 👋
-          </p>
-        )}
-      </motion.header>
+      {/* ─── Immersive Hero Section ─── */}
+      <motion.section
+        variants={itemVariants}
+        aria-label="Hero section"
+        className="relative overflow-hidden rounded-3xl"
+      >
+        {/* Animated gradient background */}
+        <div className="hero-gradient-bg absolute inset-0" />
 
-      {/* ─── Hero Banner ─── */}
-      <motion.section variants={itemVariants} aria-label="Hero banner" className="relative overflow-hidden rounded-2xl">
-        <div className="relative h-40 w-full">
+        {/* Floating orbs */}
+        <div className="pointer-events-none absolute inset-0 overflow-hidden">
+          <div className="hero-orb-1 absolute -right-8 -top-8 size-40 rounded-full bg-teal-400/8 blur-3xl" />
+          <div className="hero-orb-2 absolute -left-10 top-1/4 size-32 rounded-full bg-cyan-400/6 blur-3xl" />
+          <div className="hero-orb-3 absolute bottom-0 right-1/4 size-28 rounded-full bg-teal-300/5 blur-2xl" />
+        </div>
+
+        {/* Shimmer overlay */}
+        <div className="hero-shimmer pointer-events-none absolute inset-0" />
+
+        {/* Hero image layer */}
+        <div className="relative min-h-[240px] w-full sm:min-h-[280px]">
           <Image
             src="/nextech-hero.png"
             alt="NexTech Career - AI-Powered Career Platform for South Africa"
             fill
-            className="object-cover"
+            sizes="100vw"
+            className="object-cover opacity-30 mix-blend-luminosity"
             priority
           />
-          <div className="absolute inset-0 bg-gradient-to-t from-background via-background/60 to-transparent" />
-          <div className="absolute bottom-0 left-0 right-0 p-4">
-            <p className="text-sm font-semibold text-teal-400">Empowering South Africa&apos;s Youth</p>
-            <p className="text-xs text-foreground/70 mt-0.5">AI-powered tools to bridge skills and employment</p>
+          {/* Gradient overlays for text readability */}
+          <div className="absolute inset-0 bg-gradient-to-t from-[oklch(0.12_0.03_180)] via-[oklch(0.12_0.03_180)]/70 to-transparent" />
+          <div className="absolute inset-0 bg-gradient-to-b from-[oklch(0.12_0.03_180)]/40 via-transparent to-transparent" />
+
+          {/* Content overlay */}
+          <div className="absolute inset-0 flex flex-col justify-between p-5">
+            {/* Top row: Greeting + Brand */}
+            <div className="flex items-start justify-between">
+              <div>
+                <div className="flex items-center gap-2 mb-1.5">
+                  {greeting.icon}
+                  <span className="text-sm font-medium text-foreground/70">{greeting.text}</span>
+                </div>
+                <h1 className="text-2xl font-bold text-foreground leading-tight">
+                  {user?.name ? (
+                    <>
+                      Hey, <span className="gradient-text">{user.name.split(' ')[0]}</span>
+                    </>
+                  ) : (
+                    <>
+                      Welcome to <span className="gradient-text">NexTech</span>
+                    </>
+                  )}
+                </h1>
+                <p className="text-xs text-foreground/60 mt-1">Your AI Career Mentor</p>
+              </div>
+
+              {/* NexTech mini logo */}
+              <div className="flex size-10 items-center justify-center rounded-xl bg-teal-400/15 border border-teal-400/20 shrink-0">
+                <Sparkles className="size-5 text-teal-400" />
+              </div>
+            </div>
+
+            {/* Bottom row: Journey Progress + Quick Stats */}
+            <div className="space-y-3">
+              {/* Career Journey Progress Bar */}
+              <div className="glass rounded-xl p-3">
+                <div className="flex items-center justify-between mb-2">
+                  <div className="flex items-center gap-2">
+                    <Rocket className="size-3.5 text-teal-400" />
+                    <span className="text-xs font-semibold text-foreground/80">Career Journey</span>
+                  </div>
+                  <span className="text-xs font-bold text-teal-400">{progressPercent}%</span>
+                </div>
+                <div className="flex gap-1.5">
+                  {journeySteps.map((step, i) => {
+                    const isCompleted = careerContext[step.key]
+                    return (
+                      <div key={step.key} className="flex-1">
+                        <div className="flex items-center gap-1 mb-1">
+                          <div
+                            className={`size-1.5 rounded-full ${
+                              isCompleted ? 'bg-teal-400' : 'bg-foreground/15'
+                            }`}
+                          />
+                          <span
+                            className={`text-[10px] font-medium ${
+                              isCompleted ? 'text-teal-400' : 'text-foreground/35'
+                            }`}
+                          >
+                            {step.label}
+                          </span>
+                        </div>
+                        <div className="h-1.5 rounded-full bg-foreground/10 overflow-hidden">
+                          <motion.div
+                            initial={{ width: 0 }}
+                            animate={{ width: isCompleted ? '100%' : '0%' }}
+                            transition={{ duration: 0.8, delay: 0.3 + i * 0.15, ease: 'easeOut' }}
+                            className="h-full rounded-full bg-gradient-to-r from-teal-500 to-cyan-400"
+                          />
+                        </div>
+                      </div>
+                    )
+                  })}
+                </div>
+              </div>
+
+              {/* Quick Stats Row */}
+              <div className="flex gap-2">
+                <div className="glass flex-1 rounded-xl px-3 py-2.5 flex items-center gap-2 min-h-[44px]">
+                  <FileText className="size-4 text-teal-400 shrink-0" />
+                  <div>
+                    <p className="text-sm font-bold text-foreground leading-none">{resumeCount}</p>
+                    <p className="text-[10px] text-foreground/50 leading-none mt-0.5">Resumes</p>
+                  </div>
+                </div>
+                <div className="glass flex-1 rounded-xl px-3 py-2.5 flex items-center gap-2 min-h-[44px]">
+                  <Mail className="size-4 text-cyan-400 shrink-0" />
+                  <div>
+                    <p className="text-sm font-bold text-foreground leading-none">{letterCount}</p>
+                    <p className="text-[10px] text-foreground/50 leading-none mt-0.5">Letters</p>
+                  </div>
+                </div>
+                <div className="glass flex-1 rounded-xl px-3 py-2.5 flex items-center gap-2 min-h-[44px]">
+                  <Award className="size-4 text-amber-400 shrink-0" />
+                  <div>
+                    <p className="text-sm font-bold text-foreground leading-none">
+                      {interviewCount > 0 ? `${avgScore}%` : '—'}
+                    </p>
+                    <p className="text-[10px] text-foreground/50 leading-none mt-0.5">Score</p>
+                  </div>
+                </div>
+              </div>
+            </div>
           </div>
         </div>
       </motion.section>
@@ -207,36 +348,6 @@ export default function Dashboard() {
               </motion.button>
             )
           })}
-        </div>
-      </motion.section>
-
-      {/* ─── Stats Section ─── */}
-      <motion.section variants={itemVariants} aria-label="Your stats">
-        <h2 className="mb-3 text-sm font-semibold uppercase tracking-wider text-muted-foreground">
-          Your Progress
-        </h2>
-        <div className="flex gap-3 overflow-x-auto pb-2 scrollbar-none">
-          <StatCard
-            icon={<FileText className="size-4 text-teal-400" />}
-            label="Resumes"
-            value={resumeCount}
-          />
-          <StatCard
-            icon={<Mail className="size-4 text-cyan-400" />}
-            label="Letters"
-            value={letterCount}
-          />
-          <StatCard
-            icon={<Mic className="size-4 text-purple-400" />}
-            label="Interviews"
-            value={interviewCount}
-          />
-          <StatCard
-            icon={<Award className="size-4 text-amber-400" />}
-            label="Avg Score"
-            value={avgScore}
-            suffix={interviewCount > 0 ? '%' : ''}
-          />
         </div>
       </motion.section>
 
@@ -297,33 +408,5 @@ export default function Dashboard() {
         </motion.section>
       )}
     </motion.div>
-  )
-}
-
-/* ─── Stat Card Sub-component ─── */
-function StatCard({
-  icon,
-  label,
-  value,
-  suffix = '',
-}: {
-  icon: React.ReactNode
-  label: string
-  value: number
-  suffix?: string
-}) {
-  return (
-    <div className="glass flex min-w-[110px] flex-col gap-2 rounded-2xl p-3.5">
-      <div className="flex items-center gap-2">
-        {icon}
-        <span className="text-[11px] font-medium text-muted-foreground">
-          {label}
-        </span>
-      </div>
-      <p className="text-2xl font-bold text-foreground">
-        {value}
-        {suffix}
-      </p>
-    </div>
   )
 }
