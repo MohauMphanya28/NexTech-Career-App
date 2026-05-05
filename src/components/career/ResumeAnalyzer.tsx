@@ -491,10 +491,13 @@ export default function ResumeAnalyzer() {
       if (saveData.success && saveData.userId && !storeState.dbUserId) {
         storeState.setDbUserId(saveData.userId)
       }
-      // Refresh document list
-      fetch(`/api/career-documents`).then(r => r.json()).then(d => {
-        if (d.success) storeState.setSavedDocuments(d.documents)
-      }).catch(() => {})
+      // Refresh document list with correct userId
+      const refreshUserId = saveData.userId || userId || storeState.dbUserId
+      if (refreshUserId) {
+        fetch(`/api/career-documents?userId=${refreshUserId}`).then(r => r.json()).then(d => {
+          if (d.success) storeState.setSavedDocuments(d.documents)
+        }).catch(() => {})
+      }
     } catch {
       // Non-critical — resume is loaded in builder
     }

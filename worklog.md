@@ -63,3 +63,37 @@ Stage Summary:
 - Authentication: Full login/signup/sign-out system with localStorage persistence
 - All code compiles (verified: `GET / 200`)
 - No lint errors in src/ directory
+
+---
+Task ID: 4
+Agent: Main Agent
+Task: Fix hydration mismatch, infinite API loop, My Docs save issues
+
+Work Log:
+- Fixed hydration mismatch error in AuthScreen component (fdprocessedid from browser extensions):
+  - Added `mounted` useState and useEffect guard in AuthScreen.tsx
+  - When `mounted=false`, renders a loading spinner instead of form inputs
+  - This prevents browser extensions from adding `fdprocessedid` to form elements before React hydrates
+  - Eliminates server/client DOM mismatch
+- Fixed infinite API loop in page.tsx:
+  - The useEffect had `user` and `isAuthenticated` in dependency array, causing infinite re-renders
+  - `/api/user` was being called in a tight loop (visible in dev.log)
+  - Replaced with `useRef(authCheckDone)` to ensure auth check only runs once on mount
+  - Added `restored` flag to avoid redundant fallback fetch
+  - Used `useAppStore.getState().user` instead of `user` from closure to avoid stale reference
+- Fixed My Docs document refresh using wrong userId:
+  - ResumeAnalyzer.handleUseImprovedResume: Changed `fetch('/api/career-documents')` to `fetch('/api/career-documents?userId=${refreshUserId}')`
+  - CoverLetterGenerator.handleSave: Same fix for document list refresh
+  - ResumeBuilder.handleSave: Same fix
+  - InterviewCoach.saveInterviewToDb: Same fix
+  - All refresh calls now use the correct userId from `saveData.userId || userId || storeState.dbUserId`
+- Verified CareerGuide component: Already implements contextual guidance with floating button, pulse animation, next-step suggestions, tips, and progress indicator
+- Verified InterviewCoach context-awareness: Already passes full candidateContext (resume, cover letter, skills, experience, education) to interview API in both 'start' and 'evaluate' actions
+- Verified interview API: Uses candidate context to tailor questions and evaluation to the candidate's background
+
+Stage Summary:
+- Hydration mismatch fix: AuthScreen uses mounted guard to prevent browser extension interference
+- Infinite API loop fix: Auth check useEffect runs only once with ref guard
+- My Docs fix: All document refresh calls now use correct userId parameter
+- No lint errors in src/ directory
+- Dev server compiles successfully, no more infinite /api/user calls

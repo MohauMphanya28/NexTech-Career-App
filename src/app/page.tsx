@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useCallback } from 'react'
+import { useEffect, useCallback, useRef } from 'react'
 import { useAppStore } from '@/lib/store'
 import OnboardingFlow from '@/components/career/OnboardingFlow'
 import Dashboard from '@/components/career/Dashboard'
@@ -136,17 +136,26 @@ function ProfileView() {
 export default function Home() {
   const { currentView, dbUserId, setDbUserId, user, setUser, isAuthenticated, setIsAuthenticated } = useAppStore()
 
+  // Use a ref to ensure auth check only runs once on mount
+  const authCheckDone = useRef(false)
+
   // On mount, check localStorage for existing auth
   useEffect(() => {
+    if (authCheckDone.current) return
+    authCheckDone.current = true
+
     if (typeof window === 'undefined') return
+
+    let restored = false
 
     try {
       const authData = localStorage.getItem('nextech_auth')
       if (authData) {
-        const { userId, email } = JSON.parse(authData)
+        const { userId } = JSON.parse(authData)
         if (userId) {
           setDbUserId(userId)
           setIsAuthenticated(true)
+          restored = true
           // Restore user profile
           fetch(`/api/user?id=${userId}`)
             .then(r => r.json())
@@ -170,7 +179,6 @@ export default function Home() {
               }
             })
             .catch(() => {})
-          return // Don't fall through to the default fetch
         }
       }
     } catch {
@@ -179,48 +187,49 @@ export default function Home() {
     }
 
     // Fallback: try to resolve the DB user ID if we don't have auth
-    if (dbUserId) return
-    fetch('/api/career-documents')
-      .then(r => r.json())
-      .then(data => {
-        if (data.userId) {
-          setDbUserId(data.userId)
-          // Also auto-authenticate legacy users
-          setIsAuthenticated(true)
-          if (typeof window !== 'undefined') {
-            localStorage.setItem('nextech_auth', JSON.stringify({
-              userId: data.userId,
-              email: '',
-            }))
+    if (!restored) {
+      fetch('/api/career-documents')
+        .then(r => r.json())
+        .then(data => {
+          if (data.userId) {
+            setDbUserId(data.userId)
+            // Also auto-authenticate legacy users
+            setIsAuthenticated(true)
+            if (typeof window !== 'undefined') {
+              localStorage.setItem('nextech_auth', JSON.stringify({
+                userId: data.userId,
+                email: '',
+              }))
+            }
           }
-        }
-        if (data.success && !user) {
-          fetch(`/api/user?id=${data.userId}`)
-            .then(r => r.json())
-            .then(userData => {
-              if (userData.success && userData.user) {
-                setUser({
-                  id: userData.user.id,
-                  name: userData.user.name || '',
-                  email: userData.user.email || '',
-                  phone: userData.user.phone || '',
-                  age: userData.user.age,
-                  location: userData.user.location || '',
-                  education: userData.user.education || '',
-                  field: userData.user.field || '',
-                  experience: userData.user.experience || '',
-                  skills: userData.user.skills ? JSON.parse(userData.user.skills) : [],
-                  careerGoal: userData.user.careerGoal || '',
-                  onboardingDone: userData.user.onboardingDone || false,
-                  onboardingStep: userData.user.onboardingStep || 0,
-                })
-              }
-            })
-            .catch(() => {})
-        }
-      })
-      .catch(() => {})
-  }, [dbUserId, setDbUserId, user, setUser, isAuthenticated, setIsAuthenticated])
+          if (data.success && !useAppStore.getState().user) {
+            fetch(`/api/user?id=${data.userId}`)
+              .then(r => r.json())
+              .then(userData => {
+                if (userData.success && userData.user) {
+                  setUser({
+                    id: userData.user.id,
+                    name: userData.user.name || '',
+                    email: userData.user.email || '',
+                    phone: userData.user.phone || '',
+                    age: userData.user.age,
+                    location: userData.user.location || '',
+                    education: userData.user.education || '',
+                    field: userData.user.field || '',
+                    experience: userData.user.experience || '',
+                    skills: userData.user.skills ? JSON.parse(userData.user.skills) : [],
+                    careerGoal: userData.user.careerGoal || '',
+                    onboardingDone: userData.user.onboardingDone || false,
+                    onboardingStep: userData.user.onboardingStep || 0,
+                  })
+                }
+              })
+              .catch(() => {})
+          }
+        })
+        .catch(() => {})
+    }
+  }, [])
 
   // Auth screen (no navbar)
   if (!isAuthenticated && currentView !== 'onboarding') {

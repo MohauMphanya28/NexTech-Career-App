@@ -656,11 +656,14 @@ function saveInterviewToDb(params: {
       const storeState = useAppStore.getState()
       if (!storeState.dbUserId) storeState.setDbUserId(d.userId)
     }
-    // Refresh document list
+    // Refresh document list with correct userId
     const storeState = useAppStore.getState()
-    fetch('/api/career-documents').then(r => r.json()).then(d => {
-      if (d.success) storeState.setSavedDocuments(d.documents)
-    }).catch(() => {})
+    const refreshUserId = d.userId || params.userId || storeState.dbUserId
+    if (refreshUserId) {
+      fetch(`/api/career-documents?userId=${refreshUserId}`).then(r => r.json()).then(docD => {
+        if (docD.success) storeState.setSavedDocuments(docD.documents)
+      }).catch(() => {})
+    }
   }).catch(() => {})
 }
 

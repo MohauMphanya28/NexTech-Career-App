@@ -563,10 +563,13 @@ export default function ResumeBuilder() {
         } else {
           console.error('Failed to save resume to DB:', saveData.error)
         }
-        // Refresh document list in background
-        fetch('/api/career-documents').then(r => r.json()).then(d => {
-          if (d.success) storeState.setSavedDocuments(d.documents)
-        }).catch(() => {})
+        // Refresh document list in background with correct userId
+        const refreshUserId = saveData.userId || userId || storeState.dbUserId
+        if (refreshUserId) {
+          fetch(`/api/career-documents?userId=${refreshUserId}`).then(r => r.json()).then(d => {
+            if (d.success) storeState.setSavedDocuments(d.documents)
+          }).catch(() => {})
+        }
       } catch (saveErr) {
         console.error('Failed to save resume to DB:', saveErr)
       }

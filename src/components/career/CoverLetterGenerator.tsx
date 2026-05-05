@@ -293,10 +293,13 @@ export default function CoverLetterGenerator() {
       if (saveData.success && saveData.userId && !storeState.dbUserId) {
         storeState.setDbUserId(saveData.userId)
       }
-      // Refresh document list in background
-      fetch('/api/career-documents').then(r => r.json()).then(d => {
-        if (d.success) storeState.setSavedDocuments(d.documents)
-      }).catch(() => {})
+      // Refresh document list in background with correct userId
+      const refreshUserId = saveData.userId || userId || storeState.dbUserId
+      if (refreshUserId) {
+        fetch(`/api/career-documents?userId=${refreshUserId}`).then(r => r.json()).then(d => {
+          if (d.success) storeState.setSavedDocuments(d.documents)
+        }).catch(() => {})
+      }
     } catch {
       // Non-critical
     }

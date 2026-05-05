@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useCallback } from 'react'
+import { useState, useCallback, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
   Sparkles,
@@ -39,6 +39,7 @@ const itemVariants = {
 export default function AuthScreen() {
   const { setUser, setDbUserId, setIsAuthenticated, setCurrentView } = useAppStore()
 
+  const [mounted, setMounted] = useState(false)
   const [mode, setMode] = useState<AuthMode>('login')
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
@@ -46,6 +47,14 @@ export default function AuthScreen() {
   const [showPassword, setShowPassword] = useState(false)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
+
+  // Prevent hydration mismatch: browser extensions (password managers, autofill)
+  // add `fdprocessedid` attributes to form elements before React hydrates,
+  // causing a server/client DOM mismatch. By waiting until mount to render,
+  // we avoid SSR entirely for the form and eliminate the mismatch.
+  useEffect(() => {
+    setMounted(true)
+  }, [])
 
   const handleSubmit = useCallback(async (e: React.FormEvent) => {
     e.preventDefault()
@@ -136,6 +145,20 @@ export default function AuthScreen() {
     setMode(mode === 'login' ? 'register' : 'login')
     setError('')
   }, [mode])
+
+  // Don't render the form during SSR to avoid hydration mismatch from browser extensions
+  if (!mounted) {
+    return (
+      <div className="flex min-h-screen flex-col items-center justify-center bg-background">
+        <div className="flex size-16 items-center justify-center rounded-2xl bg-teal-400/15 border border-teal-400/30 mb-4">
+          <Sparkles className="size-8 text-teal-400" />
+        </div>
+        <h1 className="gradient-text text-3xl font-bold tracking-tight">NexTech</h1>
+        <p className="text-sm text-muted-foreground mt-1">Your AI-Powered Career Mentor</p>
+        <div className="mt-6 size-6 border-2 border-teal-400/30 border-t-teal-400 rounded-full animate-spin" />
+      </div>
+    )
+  }
 
   return (
     <div className="flex min-h-screen flex-col bg-background">
