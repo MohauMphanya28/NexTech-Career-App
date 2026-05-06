@@ -1,7 +1,6 @@
 'use client'
 
-import { useState, useCallback, useEffect } from 'react'
-import { motion } from 'framer-motion'
+import { useState, useCallback } from 'react'
 import {
   Sparkles,
   Mail,
@@ -22,7 +21,6 @@ type AuthMode = 'login' | 'register'
 export default function AuthScreen() {
   const { setUser, setDbUserId, setIsAuthenticated, setCurrentView } = useAppStore()
 
-  const [mounted, setMounted] = useState(false)
   const [mode, setMode] = useState<AuthMode>('login')
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
@@ -30,14 +28,6 @@ export default function AuthScreen() {
   const [showPassword, setShowPassword] = useState(false)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
-
-  // Prevent hydration mismatch: browser extensions (password managers, autofill)
-  // add `fdprocessedid` attributes to form elements before React hydrates,
-  // causing a server/client DOM mismatch. By waiting until mount to render,
-  // we avoid SSR entirely for the form and eliminate the mismatch.
-  useEffect(() => {
-    setMounted(true)
-  }, [])
 
   const handleSubmit = useCallback(async (e: React.FormEvent) => {
     e.preventDefault()
@@ -86,12 +76,12 @@ export default function AuthScreen() {
         name: apiUser.name || '',
         email: apiUser.email || '',
         phone: apiUser.phone || '',
-        age: null,
+        age: null as number | null,
         location: apiUser.location || '',
         education: apiUser.education || '',
         field: apiUser.field || '',
         experience: apiUser.experience || '',
-        skills: apiUser.skills ? JSON.parse(apiUser.skills) : [],
+        skills: apiUser.skills ? (typeof apiUser.skills === 'string' ? JSON.parse(apiUser.skills) : apiUser.skills) : [],
         careerGoal: apiUser.careerGoal || '',
         onboardingDone: apiUser.onboardingDone || false,
         onboardingStep: apiUser.onboardingStep || 0,
@@ -125,85 +115,59 @@ export default function AuthScreen() {
   }, [mode, email, password, name, setUser, setDbUserId, setIsAuthenticated, setCurrentView])
 
   const switchMode = useCallback(() => {
-    setMode(mode === 'login' ? 'register' : 'login')
+    setMode(prev => prev === 'login' ? 'register' : 'login')
     setError('')
-  }, [mode])
+  }, [])
 
-  // Don't render the form during SSR to avoid hydration mismatch from browser extensions
-  if (!mounted) {
-    return (
-      <div className="flex min-h-screen flex-col items-center justify-center bg-background">
-        <div className="flex size-16 items-center justify-center rounded-2xl bg-teal-400/15 border border-teal-400/30 mb-4">
-          <Sparkles className="size-8 text-teal-400" />
-        </div>
-        <h1 className="gradient-text text-3xl font-bold tracking-tight">NexTech</h1>
-        <p className="text-sm text-muted-foreground mt-1">Your AI-Powered Career Mentor</p>
-        <div className="mt-6 size-6 border-2 border-teal-400/30 border-t-teal-400 rounded-full animate-spin" />
-      </div>
-    )
-  }
+  const isRegister = mode === 'register'
 
   return (
     <div className="flex min-h-screen flex-col bg-background">
-      {/* Hero Section */}
+      {/* Hero Section — pure CSS animations, no Framer Motion */}
       <div className="flex-shrink-0 relative overflow-hidden">
         <div className="absolute inset-0 bg-gradient-to-br from-teal-500/10 via-background to-cyan-500/5" />
         <div className="relative px-6 pt-16 pb-8 text-center">
-          <motion.div
-            initial={{ opacity: 0, scale: 0.8 }}
-            animate={{ opacity: 1, scale: 1 }}
-            transition={{ duration: 0.5, ease: 'easeOut' }}
-            className="flex size-16 mx-auto items-center justify-center rounded-2xl bg-teal-400/15 border border-teal-400/30 mb-4"
-          >
+          <div className="flex size-16 mx-auto items-center justify-center rounded-2xl bg-teal-400/15 border border-teal-400/30 mb-4 animate-in fade-in zoom-in-95 duration-500">
             <Sparkles className="size-8 text-teal-400" />
-          </motion.div>
-          <motion.h1
-            initial={{ opacity: 0, y: 10 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.2 }}
-            className="gradient-text text-3xl font-bold tracking-tight"
-          >
+          </div>
+          <h1 className="gradient-text text-3xl font-bold tracking-tight animate-in fade-in slide-in-from-bottom-2 duration-500 delay-100">
             NexTech
-          </motion.h1>
-          <motion.p
-            initial={{ opacity: 0, y: 10 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.3 }}
-            className="text-sm text-muted-foreground mt-1"
-          >
+          </h1>
+          <p className="text-sm text-muted-foreground mt-1 animate-in fade-in slide-in-from-bottom-2 duration-500 delay-200">
             Your AI-Powered Career Mentor
-          </motion.p>
+          </p>
         </div>
       </div>
 
-      {/* Auth Form — using plain divs to avoid Framer Motion variant propagation issues */}
+      {/* Auth Form */}
       <div className="flex-1 px-6 pb-8">
         <form onSubmit={handleSubmit} className="space-y-4">
           {/* Mode Title */}
           <div>
             <h2 className="text-xl font-bold text-foreground">
-              {mode === 'login' ? 'Welcome Back' : 'Create Account'}
+              {isRegister ? 'Create Account' : 'Welcome Back'}
             </h2>
             <p className="text-sm text-muted-foreground mt-1">
-              {mode === 'login'
-                ? 'Sign in to continue your career journey'
-                : 'Start your journey to career success'}
+              {isRegister
+                ? 'Start your journey to career success'
+                : 'Sign in to continue your career journey'}
             </p>
           </div>
 
-          {/* Name (register only) */}
-          {mode === 'register' && (
-            <div>
+          {/* Name field — register mode only */}
+          {isRegister && (
+            <div className="animate-in fade-in slide-in-from-top-2 duration-300">
               <label className="text-sm font-medium text-foreground mb-1.5 block">
                 Full Name <span className="text-destructive">*</span>
               </label>
               <div className="relative">
-                <User className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-muted-foreground" />
+                <User className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-muted-foreground pointer-events-none" />
                 <Input
                   placeholder="e.g. Thabo Mokoena"
                   value={name}
                   onChange={(e) => setName(e.target.value)}
                   className="bg-secondary border-border focus:border-primary rounded-xl h-12 text-base pl-10"
+                  autoComplete="name"
                 />
               </div>
             </div>
@@ -215,7 +179,7 @@ export default function AuthScreen() {
               Email <span className="text-destructive">*</span>
             </label>
             <div className="relative">
-              <Mail className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-muted-foreground" />
+              <Mail className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-muted-foreground pointer-events-none" />
               <Input
                 type="email"
                 placeholder="you@example.co.za"
@@ -233,14 +197,14 @@ export default function AuthScreen() {
               Password <span className="text-destructive">*</span>
             </label>
             <div className="relative">
-              <Lock className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-muted-foreground" />
+              <Lock className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-muted-foreground pointer-events-none" />
               <Input
                 type={showPassword ? 'text' : 'password'}
                 placeholder="At least 6 characters"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 className="bg-secondary border-border focus:border-primary rounded-xl h-12 text-base pl-10 pr-10"
-                autoComplete={mode === 'login' ? 'current-password' : 'new-password'}
+                autoComplete={isRegister ? 'new-password' : 'current-password'}
               />
               <button
                 type="button"
@@ -255,7 +219,7 @@ export default function AuthScreen() {
 
           {/* Error Message */}
           {error && (
-            <div className="rounded-xl bg-red-500/10 border border-red-500/30 px-4 py-3 text-sm text-red-400">
+            <div className="rounded-xl bg-red-500/10 border border-red-500/30 px-4 py-3 text-sm text-red-400 animate-in fade-in slide-in-from-top-1 duration-200">
               {error}
             </div>
           )}
@@ -269,13 +233,13 @@ export default function AuthScreen() {
               size="lg"
             >
               {loading ? (
-                <div className="flex items-center gap-2">
-                  <div className="size-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                  {mode === 'login' ? 'Signing in...' : 'Creating account...'}
-                </div>
+                <span className="flex items-center gap-2">
+                  <span className="size-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                  {isRegister ? 'Creating account...' : 'Signing in...'}
+                </span>
               ) : (
                 <>
-                  {mode === 'login' ? 'Sign In' : 'Create Account'}
+                  {isRegister ? 'Create Account' : 'Sign In'}
                   <ArrowRight className="size-4" />
                 </>
               )}
@@ -285,13 +249,13 @@ export default function AuthScreen() {
           {/* Switch Mode */}
           <div className="text-center pt-2">
             <p className="text-sm text-muted-foreground">
-              {mode === 'login' ? "Don't have an account?" : 'Already have an account?'}{' '}
+              {isRegister ? 'Already have an account?' : "Don't have an account?"}{' '}
               <button
                 type="button"
                 onClick={switchMode}
                 className="text-teal-400 font-medium hover:text-teal-300 transition-colors"
               >
-                {mode === 'login' ? 'Sign up' : 'Sign in'}
+                {isRegister ? 'Sign in' : 'Sign up'}
               </button>
             </p>
           </div>
