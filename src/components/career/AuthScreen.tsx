@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useCallback, useEffect } from 'react'
-import { motion, AnimatePresence } from 'framer-motion'
+import { motion } from 'framer-motion'
 import {
   Sparkles,
   Mail,
@@ -10,7 +10,7 @@ import {
   ArrowRight,
   Eye,
   EyeOff,
-  Chrome,
+  Globe,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -200,138 +200,131 @@ export default function AuthScreen() {
         initial="hidden"
         animate="visible"
       >
-        <AnimatePresence mode="wait">
-          <motion.form
-            key={mode}
-            initial={{ opacity: 0, x: mode === 'login' ? -20 : 20 }}
-            animate={{ opacity: 1, x: 0 }}
-            exit={{ opacity: 0, x: mode === 'login' ? 20 : -20 }}
-            transition={{ duration: 0.3 }}
-            onSubmit={handleSubmit}
-            className="space-y-4"
-          >
-            {/* Mode Title */}
-            <motion.div variants={itemVariants}>
-              <h2 className="text-xl font-bold text-foreground">
-                {mode === 'login' ? 'Welcome Back' : 'Create Account'}
-              </h2>
-              <p className="text-sm text-muted-foreground mt-1">
-                {mode === 'login'
-                  ? 'Sign in to continue your career journey'
-                  : 'Start your journey to career success'}
-              </p>
-            </motion.div>
+        <form
+          onSubmit={handleSubmit}
+          className="space-y-4"
+        >
+          {/* Mode Title */}
+          <motion.div variants={itemVariants}>
+            <h2 className="text-xl font-bold text-foreground">
+              {mode === 'login' ? 'Welcome Back' : 'Create Account'}
+            </h2>
+            <p className="text-sm text-muted-foreground mt-1">
+              {mode === 'login'
+                ? 'Sign in to continue your career journey'
+                : 'Start your journey to career success'}
+            </p>
+          </motion.div>
 
-            {/* Name (register only) */}
-            {mode === 'register' && (
-              <motion.div variants={itemVariants}>
-                <label className="text-sm font-medium text-foreground mb-1.5 block">
-                  Full Name <span className="text-destructive">*</span>
-                </label>
-                <div className="relative">
-                  <User className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-muted-foreground" />
-                  <Input
-                    placeholder="e.g. Thabo Mokoena"
-                    value={name}
-                    onChange={(e) => setName(e.target.value)}
-                    className="bg-secondary border-border focus:border-primary rounded-xl h-12 text-base pl-10"
-                  />
-                </div>
-              </motion.div>
-            )}
-
-            {/* Email */}
-            <motion.div variants={itemVariants}>
+          {/* Name (register only) */}
+          {mode === 'register' && (
+            <motion.div variants={itemVariants} key="name-field">
               <label className="text-sm font-medium text-foreground mb-1.5 block">
-                Email <span className="text-destructive">*</span>
+                Full Name <span className="text-destructive">*</span>
               </label>
               <div className="relative">
-                <Mail className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-muted-foreground" />
+                <User className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-muted-foreground" />
                 <Input
-                  type="email"
-                  placeholder="you@example.co.za"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
+                  placeholder="e.g. Thabo Mokoena"
+                  value={name}
+                  onChange={(e) => setName(e.target.value)}
                   className="bg-secondary border-border focus:border-primary rounded-xl h-12 text-base pl-10"
-                  autoComplete="email"
                 />
               </div>
             </motion.div>
+          )}
 
-            {/* Password */}
-            <motion.div variants={itemVariants}>
-              <label className="text-sm font-medium text-foreground mb-1.5 block">
-                Password <span className="text-destructive">*</span>
-              </label>
-              <div className="relative">
-                <Lock className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-muted-foreground" />
-                <Input
-                  type={showPassword ? 'text' : 'password'}
-                  placeholder="At least 6 characters"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  className="bg-secondary border-border focus:border-primary rounded-xl h-12 text-base pl-10 pr-10"
-                  autoComplete={mode === 'login' ? 'current-password' : 'new-password'}
-                />
-                <button
-                  type="button"
-                  onClick={() => setShowPassword(!showPassword)}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
-                  aria-label={showPassword ? 'Hide password' : 'Show password'}
-                >
-                  {showPassword ? <EyeOff className="size-4" /> : <Eye className="size-4" />}
-                </button>
-              </div>
-            </motion.div>
+          {/* Email */}
+          <motion.div variants={itemVariants}>
+            <label className="text-sm font-medium text-foreground mb-1.5 block">
+              Email <span className="text-destructive">*</span>
+            </label>
+            <div className="relative">
+              <Mail className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-muted-foreground" />
+              <Input
+                type="email"
+                placeholder="you@example.co.za"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                className="bg-secondary border-border focus:border-primary rounded-xl h-12 text-base pl-10"
+                autoComplete="email"
+              />
+            </div>
+          </motion.div>
 
-            {/* Error Message */}
-            {error && (
-              <motion.div
-                initial={{ opacity: 0, y: -5 }}
-                animate={{ opacity: 1, y: 0 }}
-                className="rounded-xl bg-red-500/10 border border-red-500/30 px-4 py-3 text-sm text-red-400"
+          {/* Password */}
+          <motion.div variants={itemVariants}>
+            <label className="text-sm font-medium text-foreground mb-1.5 block">
+              Password <span className="text-destructive">*</span>
+            </label>
+            <div className="relative">
+              <Lock className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-muted-foreground" />
+              <Input
+                type={showPassword ? 'text' : 'password'}
+                placeholder="At least 6 characters"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                className="bg-secondary border-border focus:border-primary rounded-xl h-12 text-base pl-10 pr-10"
+                autoComplete={mode === 'login' ? 'current-password' : 'new-password'}
+              />
+              <button
+                type="button"
+                onClick={() => setShowPassword(!showPassword)}
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
+                aria-label={showPassword ? 'Hide password' : 'Show password'}
               >
-                {error}
-              </motion.div>
-            )}
+                {showPassword ? <EyeOff className="size-4" /> : <Eye className="size-4" />}
+              </button>
+            </div>
+          </motion.div>
 
-            {/* Submit Button */}
-            <motion.div variants={itemVariants}>
-              <Button
-                type="submit"
-                disabled={loading}
-                className="w-full bg-teal-500 text-white hover:bg-teal-400 rounded-xl h-13 text-base font-semibold gap-2 disabled:opacity-50"
-                size="lg"
+          {/* Error Message */}
+          {error && (
+            <motion.div
+              initial={{ opacity: 0, y: -5 }}
+              animate={{ opacity: 1, y: 0 }}
+              className="rounded-xl bg-red-500/10 border border-red-500/30 px-4 py-3 text-sm text-red-400"
+            >
+              {error}
+            </motion.div>
+          )}
+
+          {/* Submit Button */}
+          <motion.div variants={itemVariants}>
+            <Button
+              type="submit"
+              disabled={loading}
+              className="w-full bg-teal-500 text-white hover:bg-teal-400 rounded-xl h-13 text-base font-semibold gap-2 disabled:opacity-50"
+              size="lg"
+            >
+              {loading ? (
+                <div className="flex items-center gap-2">
+                  <div className="size-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                  {mode === 'login' ? 'Signing in...' : 'Creating account...'}
+                </div>
+              ) : (
+                <>
+                  {mode === 'login' ? 'Sign In' : 'Create Account'}
+                  <ArrowRight className="size-4" />
+                </>
+              )}
+            </Button>
+          </motion.div>
+
+          {/* Switch Mode */}
+          <motion.div variants={itemVariants} className="text-center pt-2">
+            <p className="text-sm text-muted-foreground">
+              {mode === 'login' ? "Don't have an account?" : 'Already have an account?'}{' '}
+              <button
+                type="button"
+                onClick={switchMode}
+                className="text-teal-400 font-medium hover:text-teal-300 transition-colors"
               >
-                {loading ? (
-                  <div className="flex items-center gap-2">
-                    <div className="size-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                    {mode === 'login' ? 'Signing in...' : 'Creating account...'}
-                  </div>
-                ) : (
-                  <>
-                    {mode === 'login' ? 'Sign In' : 'Create Account'}
-                    <ArrowRight className="size-4" />
-                  </>
-                )}
-              </Button>
-            </motion.div>
-
-            {/* Switch Mode */}
-            <motion.div variants={itemVariants} className="text-center pt-2">
-              <p className="text-sm text-muted-foreground">
-                {mode === 'login' ? "Don't have an account?" : 'Already have an account?'}{' '}
-                <button
-                  type="button"
-                  onClick={switchMode}
-                  className="text-teal-400 font-medium hover:text-teal-300 transition-colors"
-                >
-                  {mode === 'login' ? 'Sign up' : 'Sign in'}
-                </button>
-              </p>
-            </motion.div>
-          </motion.form>
-        </AnimatePresence>
+                {mode === 'login' ? 'Sign up' : 'Sign in'}
+              </button>
+            </p>
+          </motion.div>
+        </form>
 
         {/* Features */}
         <motion.div
@@ -357,7 +350,7 @@ export default function AuthScreen() {
           <motion.div variants={itemVariants} className="glass rounded-xl p-4">
             <div className="flex items-start gap-3">
               <div className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-cyan-400/15">
-                <Chrome className="size-4 text-cyan-400" />
+                <Globe className="size-4 text-cyan-400" />
               </div>
               <div>
                 <p className="text-sm font-medium text-foreground">Built for South Africa</p>
