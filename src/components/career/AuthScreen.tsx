@@ -19,23 +19,6 @@ import { toast } from 'sonner'
 
 type AuthMode = 'login' | 'register'
 
-const containerVariants = {
-  hidden: { opacity: 0 },
-  visible: {
-    opacity: 1,
-    transition: { staggerChildren: 0.08, delayChildren: 0.2 },
-  },
-}
-
-const itemVariants = {
-  hidden: { opacity: 0, y: 20 },
-  visible: {
-    opacity: 1,
-    y: 0,
-    transition: { duration: 0.4, ease: [0.25, 0.46, 0.45, 0.94] },
-  },
-}
-
 export default function AuthScreen() {
   const { setUser, setDbUserId, setIsAuthenticated, setCurrentView } = useAppStore()
 
@@ -193,19 +176,11 @@ export default function AuthScreen() {
         </div>
       </div>
 
-      {/* Auth Form */}
-      <motion.div
-        className="flex-1 px-6 pb-8"
-        variants={containerVariants}
-        initial="hidden"
-        animate="visible"
-      >
-        <form
-          onSubmit={handleSubmit}
-          className="space-y-4"
-        >
+      {/* Auth Form — using plain divs to avoid Framer Motion variant propagation issues */}
+      <div className="flex-1 px-6 pb-8">
+        <form onSubmit={handleSubmit} className="space-y-4">
           {/* Mode Title */}
-          <motion.div variants={itemVariants}>
+          <div>
             <h2 className="text-xl font-bold text-foreground">
               {mode === 'login' ? 'Welcome Back' : 'Create Account'}
             </h2>
@@ -214,11 +189,11 @@ export default function AuthScreen() {
                 ? 'Sign in to continue your career journey'
                 : 'Start your journey to career success'}
             </p>
-          </motion.div>
+          </div>
 
           {/* Name (register only) */}
           {mode === 'register' && (
-            <motion.div variants={itemVariants} key="name-field">
+            <div>
               <label className="text-sm font-medium text-foreground mb-1.5 block">
                 Full Name <span className="text-destructive">*</span>
               </label>
@@ -231,11 +206,11 @@ export default function AuthScreen() {
                   className="bg-secondary border-border focus:border-primary rounded-xl h-12 text-base pl-10"
                 />
               </div>
-            </motion.div>
+            </div>
           )}
 
           {/* Email */}
-          <motion.div variants={itemVariants}>
+          <div>
             <label className="text-sm font-medium text-foreground mb-1.5 block">
               Email <span className="text-destructive">*</span>
             </label>
@@ -250,10 +225,10 @@ export default function AuthScreen() {
                 autoComplete="email"
               />
             </div>
-          </motion.div>
+          </div>
 
           {/* Password */}
-          <motion.div variants={itemVariants}>
+          <div>
             <label className="text-sm font-medium text-foreground mb-1.5 block">
               Password <span className="text-destructive">*</span>
             </label>
@@ -276,21 +251,17 @@ export default function AuthScreen() {
                 {showPassword ? <EyeOff className="size-4" /> : <Eye className="size-4" />}
               </button>
             </div>
-          </motion.div>
+          </div>
 
           {/* Error Message */}
           {error && (
-            <motion.div
-              initial={{ opacity: 0, y: -5 }}
-              animate={{ opacity: 1, y: 0 }}
-              className="rounded-xl bg-red-500/10 border border-red-500/30 px-4 py-3 text-sm text-red-400"
-            >
+            <div className="rounded-xl bg-red-500/10 border border-red-500/30 px-4 py-3 text-sm text-red-400">
               {error}
-            </motion.div>
+            </div>
           )}
 
           {/* Submit Button */}
-          <motion.div variants={itemVariants}>
+          <div>
             <Button
               type="submit"
               disabled={loading}
@@ -309,10 +280,10 @@ export default function AuthScreen() {
                 </>
               )}
             </Button>
-          </motion.div>
+          </div>
 
           {/* Switch Mode */}
-          <motion.div variants={itemVariants} className="text-center pt-2">
+          <div className="text-center pt-2">
             <p className="text-sm text-muted-foreground">
               {mode === 'login' ? "Don't have an account?" : 'Already have an account?'}{' '}
               <button
@@ -323,17 +294,12 @@ export default function AuthScreen() {
                 {mode === 'login' ? 'Sign up' : 'Sign in'}
               </button>
             </p>
-          </motion.div>
+          </div>
         </form>
 
         {/* Features */}
-        <motion.div
-          variants={containerVariants}
-          initial="hidden"
-          animate="visible"
-          className="mt-8 space-y-3"
-        >
-          <motion.div variants={itemVariants} className="glass rounded-xl p-4">
+        <div className="mt-8 space-y-3">
+          <div className="glass rounded-xl p-4">
             <div className="flex items-start gap-3">
               <div className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-teal-400/15">
                 <Sparkles className="size-4 text-teal-400" />
@@ -341,13 +307,13 @@ export default function AuthScreen() {
               <div>
                 <p className="text-sm font-medium text-foreground">AI-Powered Tools</p>
                 <p className="text-xs text-muted-foreground mt-0.5">
-                  Build resumes, write cover letters & practice interviews with AI guidance
+                  Build resumes, write cover letters &amp; practice interviews with AI guidance
                 </p>
               </div>
             </div>
-          </motion.div>
+          </div>
 
-          <motion.div variants={itemVariants} className="glass rounded-xl p-4">
+          <div className="glass rounded-xl p-4">
             <div className="flex items-start gap-3">
               <div className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-cyan-400/15">
                 <Globe className="size-4 text-cyan-400" />
@@ -359,15 +325,15 @@ export default function AuthScreen() {
                 </p>
               </div>
             </div>
-          </motion.div>
-        </motion.div>
+          </div>
+        </div>
 
         {/* Footer */}
         <div className="mt-8 text-center text-xs text-muted-foreground">
           <p>By continuing, you agree to NexTech&apos;s Terms of Service</p>
           <p className="mt-1 text-primary/30">Built with ❤️ for Mzansi&apos;s youth</p>
         </div>
-      </motion.div>
+      </div>
     </div>
   )
 }
