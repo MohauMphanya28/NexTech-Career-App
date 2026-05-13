@@ -1,57 +1,71 @@
 const pptxgen = require('pptxgenjs');
-const html2pptx = require('/home/z/my-project/skills/ppt/scripts/html2pptx');
 const path = require('path');
+const html2pptx = require('/home/z/my-project/skills/ppt/scripts/html2pptx.js');
+
+const SLIDES_DIR = path.join(__dirname, 'slides');
+const OUTPUT = path.join(__dirname, 'NexTech-Design-Thinking-Presentation.pptx');
+
+const slideFiles = [
+  'slide01-title.html',
+  'slide02-crisis.html',
+  'slide03-empathise-method.html',
+  'slide04-empathise-findings.html',
+  'slide05-personas.html',
+  'slide06-problem-statement.html',
+  'slide07-root-cause.html',
+  'slide08-hmw.html',
+  'slide09-ideate-ideas.html',
+  'slide10-idea-eval.html',
+  'slide11-discarded.html',
+  'slide12-prototype-overview.html',
+  'slide13-core-features.html',
+  'slide14-tech-arch.html',
+  'slide15-user-flow.html',
+  'slide16-test-methodology.html',
+  'slide17-cahau-feedback.html',
+  'slide18-refinements.html',
+  'slide19-competitive.html',
+  'slide20-impact.html',
+  'slide21-conclusion.html',
+  'slide22-thankyou.html',
+];
 
 async function main() {
   const pptx = new pptxgen();
   pptx.layout = 'LAYOUT_16x9';
-  pptx.author = 'NexTech';
-  pptx.subject = 'Addressing Youth Unemployment in South Africa';
+  pptx.author = 'Mohau Mphanya, Sive Mtengwana, Lesedi Ledwaba';
+  pptx.title = 'Design Thinking Project: NexTech Career App';
+  pptx.subject = 'Technopreneurship NTEC62110 - Sol Plaatje University';
 
   const fontConfig = { cjk: 'Microsoft YaHei', latin: 'Trebuchet MS' };
-
-  const slideFiles = [
-    'slides/slide01-cover.html',
-    'slides/slide02-problem.html',
-    'slides/slide03-solution.html',
-    'slides/slide04-resume.html',
-    'slides/slide05-cover-letter.html',
-    'slides/slide06-interview.html',
-    'slides/slide07-ux.html',
-    'slides/slide08-architecture.html',
-    'slides/slide09-sa-context.html',
-    'slides/slide10-roadmap.html',
-    'slides/slide11-impact.html',
-    'slides/slide12-closing.html',
-  ];
-
   const allWarnings = [];
-  for (const htmlFile of slideFiles) {
-    const fullPath = path.join(__dirname, htmlFile);
-    console.log(`Processing: ${htmlFile}`);
+
+  for (let i = 0; i < slideFiles.length; i++) {
+    const htmlFile = path.join(SLIDES_DIR, slideFiles[i]);
+    console.log(`Processing slide ${i + 1}/${slideFiles.length}: ${slideFiles[i]}`);
     try {
-      const { slide, placeholders, warnings } = await html2pptx(fullPath, pptx, { fontConfig });
+      const { slide, placeholders, warnings } = await html2pptx(htmlFile, pptx, { fontConfig });
       if (warnings.length > 0) {
-        console.log(`  Warnings for ${htmlFile}:`);
-        warnings.forEach(w => console.log(`    ${w}`));
-        allWarnings.push({ file: htmlFile, warnings });
-      } else {
-        console.log(`  OK`);
+        console.log(`  Warnings for ${slideFiles[i]}:`);
+        warnings.forEach(w => console.log(`    - ${w}`));
+        allWarnings.push({ slide: slideFiles[i], warnings });
       }
     } catch (err) {
-      console.error(`  ERROR: ${err.message}`);
-      allWarnings.push({ file: htmlFile, warnings: [err.message] });
+      console.error(`  ERROR on ${slideFiles[i]}: ${err.message}`);
+      allWarnings.push({ slide: slideFiles[i], warnings: [`FATAL: ${err.message}`] });
     }
   }
 
-  const outputPath = '/home/z/my-project/upload/Addressing Youth Unemployment in South Africa.pptx';
-  await pptx.writeFile({ fileName: outputPath });
-  console.log(`\nPPTX saved to: ${outputPath}`);
+  await pptx.writeFile(OUTPUT);
+  console.log(`\nPresentation saved to: ${OUTPUT}`);
+  console.log(`Total slides: ${slideFiles.length}`);
 
   if (allWarnings.length > 0) {
-    console.log(`\nTotal slides with warnings: ${allWarnings.length}`);
-  } else {
-    console.log('\nAll slides processed without warnings.');
+    console.log(`\nWarnings summary (${allWarnings.length} slides with issues):`);
+    allWarnings.forEach(({ slide, warnings }) => {
+      console.log(`  ${slide}:`);
+      warnings.forEach(w => console.log(`    - ${w}`));
+    });
   }
 }
 

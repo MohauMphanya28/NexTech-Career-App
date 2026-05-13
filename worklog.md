@@ -178,3 +178,110 @@ Stage Summary:
 - Robust JSON extraction handles markdown-wrapped responses, extra text, and common JSON issues
 - Retry mechanism provides second chance if first LLM call produces unparseable output
 - Detailed server-side logging for future debugging
+
+---
+Task ID: 4
+Agent: Main Agent
+Task: Generate comprehensive Design Thinking project DOCX document for NexTech Career App
+
+Work Log:
+- Read all 6 skill reference files: create.md, docx-js-core.md, common-rules.md, design-system.md, report.md, toc.md
+- Read previous work records from worklog.md for context
+- Designed document structure following academic report format (R5 Clean White recipe, ACADEMIC palette)
+- Wrote comprehensive JavaScript generation script at /home/z/my-project/workspace/generate-docx.js
+- Document follows 3-section architecture: Cover (no page numbers), Front matter/TOC (Roman numerals), Body (Arabic numerals)
+- Cover page: R5 academic style with title, subtitle, accent line, and 2-column meta info table with underlines
+- TOC: Proper TableOfContents element with refresh hint and PageBreak
+- 8 main sections: Introduction, Empathise, Define, Ideate, Prototype, Test, Conclusion, References
+- Includes 3 user personas (Thabo, Nomsa, Sipho), empathy map table, 5 Whys analysis table, solution comparison table, technology stack table, testing findings table
+- All headings use HeadingLevel.HEADING_X for proper TOC indexing
+- Uses Three-Line academic table style for all tables
+- Font: Times New Roman (English) + SimSun/SimHei (CJK fallback), line spacing 312 (1.3x)
+- Generated DOCX at /home/z/my-project/workspace/NexTech-Design-Thinking-Project.docx
+- Ran add_toc_placeholders.py --auto (54 headings, 54 bookmarks, exit code 0)
+- Fixed PageBreak issue (attached to content paragraph instead of empty paragraph)
+- Ran postcheck.py: 8/9 passed, 0 errors, 1 warning (line-spacing inconsistency expected due to cover large fonts)
+- Final document: comprehensive 20+ page academic report
+
+Stage Summary:
+- NexTech-Design-Thinking-Project.docx generated successfully at /home/z/my-project/workspace/
+- Post-check: 0 errors, 8/9 checks passed (1 expected warning for cover line spacing)
+- TOC properly configured with 54 placeholder entries
+- Document covers all 8 required sections with proper academic formatting
+
+---
+Task ID: 2
+Agent: Sub Agent
+Task: Create comprehensive DOCX project document for Design Thinking Assignment (NexTech Career App)
+
+Work Log:
+- Read worklog.md and all 6 skill reference files (create.md, docx-js-core.md, common-rules.md, design-system.md, report.md, toc.md)
+- Designed document structure: academic report with R5 Clean White cover, ACADEMIC palette, 3-section architecture
+- Wrote comprehensive JS generation script at /home/z/my-project/workspace/generate-design-thinking-docx.js
+- Document structure:
+  - Section 1: Cover page (Sol Plaatje University, ICT Dept, Technopreneurship NTEC62110, NexTech Group members)
+  - Section 2: Front matter with Table of Contents (Roman numeral page numbers)
+  - Section 3: Body content (Arabic page numbers, header with document title)
+- Body content covers ALL rubric requirements:
+  - Executive Summary
+  - Phase 1: Empathise (methodology, interviews with 15 job seekers, recruitment agent, career counsellor; secondary research with Stats SA, local news, social media; empathy map table)
+  - Phase 2: Define (problem statement, Five Whys root cause analysis table, 3 user personas)
+  - Phase 3: Ideate (5 brainstormed solutions with comparison matrix table, rationale for selection/discarding)
+  - Phase 4: Prototype (4 core features, technical architecture table, user flow, design principles)
+  - Phase 5: Test (8 participants, CAHAU representative feedback with 4 direct quotes, improvements implemented, testing results summary table)
+  - Conclusion
+  - References (10 sources)
+- 6 tables using Three-Line academic style (Empathy Map, Five Whys, Solution Comparison, Technology Stack, Test Participants, Testing Results)
+- All quotations properly escaped with Unicode curly quotes
+- All headings use HeadingLevel.HEADING_X for proper TOC indexing
+- Generated DOCX (27.3 KB) at /home/z/my-project/output/Design_Thinking_Project_Document.docx
+- Ran add_toc_placeholders.py --auto: 36 headings, 36 bookmarks inserted
+- Ran postcheck.py: 7/9 passed, 0 errors, 2 warnings (expected: blank-pages for TOC PageBreak, line-spacing for cover/table variations)
+
+Stage Summary:
+- Design_Thinking_Project_Document.docx generated at /home/z/my-project/output/ (29.5 KB)
+- All rubric sections covered: Empathise, Define, Ideate, Prototype, Test, Communication
+- CAHAU representative feedback prominently included with 4 direct quotes
+- Post-check: 0 errors, 7/9 checks passed (2 expected warnings)
+- TOC configured with 36 placeholder entries
+---
+Task ID: 3
+Agent: Sub Agent
+Task: Create a PowerPoint presentation using pptxgenjs directly (NOT html2pptx)
+
+Work Log:
+- Verified pptxgenjs is installed and working (CJS import confirmed)
+- Checked screenshot availability for Slide 14 (01_dashboard.png exists, 138KB)
+- Wrote comprehensive Node.js script at /home/z/my-project/generate-pptx-direct.js
+- Script builds all 18 slides using pptxgenjs API directly (addText, addShape, addImage)
+- All colors use NO "#" prefix (e.g., "FF6B2B" not "#FF6B2B")
+- Font sizes >= 10pt throughout (minimum 11pt for body text)
+- 16:9 layout using LAYOUT_16x9
+- Slide-by-slide breakdown:
+  - Slide 1 (Cover): Dark blue bg, orange accent line, title/subtitle/team/course info, decorative right-side bars
+  - Slide 2 (Introduction): 4 stat cards with color-coded numbers + 3 text cards with icons
+  - Slide 3 (Empathise - Research): Phase tag "EMPATHISE — 5 MARKS", 3 columns (Primary/Secondary/Key Findings), Thabo quote
+  - Slide 4 (Empathise - Empathy Map): 4 quadrants (SAYS/THINKS/DOES/FEELS), critical insight callout
+  - Slide 5 (Data & Insights): 4 large stat cards with descriptions
+  - Slide 6 (Problem Analysis): Core problem box, 3 barrier cards, critical insight
+  - Slide 7 (Define - Problem Statement): Gradient dark bg, phase tag "DEFINE — 10 MARKS", quote box with orange bar, Five Whys analysis
+  - Slide 8 (User Perspective): 4 pain point cards with quotes, key takeaway box
+  - Slide 9 (Current Landscape): 3 existing solutions vs 4 limitations (2-column layout)
+  - Slide 10 (The Opportunity): 4 opportunity cards with icons, critical gap callout
+  - Slide 11 (Ideate - 5 Solutions): Phase tag "IDEATE — 10 MARKS", 5 ideas (4 DISCARDED red + 1 SELECTED green)
+  - Slide 12 (Our Solution): Dark bg, 3 feature columns, 4 badges, tagline
+  - Slide 13 (Features - Detailed): 3 feature cards with 6 bullet points each
+  - Slide 14 (Prototype): Phase tag "PROTOTYPE — 10 MARKS", tech stack, dashboard screenshot, user flow, design principles
+  - Slide 15 (Competitive Advantage): 2-column comparison (Current Systems vs NexTech)
+  - Slide 16 (Testing - CAHAU): Teal dark bg, phase tag "TEST — 5 MARKS", 4 CAHAU quotes, 3 improvement badges
+  - Slide 17 (Conclusion): 3 pillar cards, 4 stat boxes, vision statement
+  - Slide 18 (Thank You): Dark bg, team names, motto "Together, we can bridge the gap."
+- Generated PPTX (608KB) at /home/z/my-project/output/NexTech_Design_Thinking_Presentation.pptx
+- Validated with thumbnail script: 18 slides detected, grid thumbnail created successfully
+
+Stage Summary:
+- NexTech_Design_Thinking_Presentation.pptx generated at /home/z/my-project/output/ (608KB)
+- All 18 rubric slides built with pptxgenjs API directly (no html2pptx)
+- Azure theme applied consistently with all specified colors
+- Screenshot from app included in Prototype slide
+- Validation passed: 18 slides, thumbnail grid generated
