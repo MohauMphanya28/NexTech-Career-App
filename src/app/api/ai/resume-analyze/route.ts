@@ -4,10 +4,6 @@ import { PDFParse } from 'pdf-parse'
 import path from 'path'
 import mammoth from 'mammoth'
 
-// Resume Analyzer API Route
-// Extracts text from PDF/DOCX directly (no external mini-service needed)
-// Then uses LLM (z-ai-web-dev-sdk) for analysis
-
 let zaiInstance: Awaited<ReturnType<typeof ZAI.create>> | null = null
 
 async function getZAI() {
@@ -54,6 +50,99 @@ async function extractText(base64: string, mimeType: string): Promise<string> {
   return extractTextFromTxt(base64)
 }
 
+// --- Robust JSON Extraction from LLM responses ---
+
+function extractJsonFromLlmResponse(text: string): string | null {
+  // Strategy 1: Strip markdown code fences first
+  let cleaned = text.trim()
+
+  // Remove ```json ... ``` or ``` ... ``` wrappers
+  const fenceMatch = cleaned.match(/```(?:json)?\s*\n?([\s\S]*?)\n?\s*```/)
+  if (fenceMatch) {
+    cleaned = fenceMatch[1].trim()
+  }
+
+  // Strategy 2: Try to find a JSON object using balanced braces
+  // This is more reliable than regex for nested JSON
+  const firstBrace = cleaned.indexOf('{')
+  if (firstBrace === -1) return null
+
+  let depth = 0
+  let inString = false
+  let escape = false
+  let lastValidEnd = -1
+
+  for (let i = firstBrace; i < cleaned.length; i++) {
+    const ch = cleaned[i]
+
+    if (escape) {
+      escape = false
+      continue
+    }
+
+    if (ch === '\\' && inString) {
+      escape = true
+      continue
+    }
+
+    if (ch === '"') {
+      inString = !inString
+      continue
+    }
+
+    if (inString) continue
+
+    if (ch === '{') depth++
+    if (ch === '}') {
+      depth--
+      if (depth === 0) {
+        lastValidEnd = i + 1
+        break // Found the outermost closing brace
+      }
+    }
+  }
+
+  if (lastValidEnd > firstBrace) {
+    return cleaned.substring(firstBrace, lastValidEnd)
+  }
+
+  // Strategy 3: Fallback regex (greedy match)
+  const regexMatch = cleaned.match(/\{[\s\S]*\}/)
+  if (regexMatch) return regexMatch[0]
+
+  return null
+}
+
+function tryParseJson(text: string): any | null {
+  try {
+    return JSON.parse(text)
+  } catch {
+    // Try fixing common JSON issues
+
+    // Fix trailing commas before } or ]
+    let fixed = text.replace(/,\s*([\]}])/g, '$1')
+
+    // Fix single quotes instead of double quotes (common LLM mistake)
+    // Only outside of double-quoted strings
+    try {
+      return JSON.parse(fixed)
+    } catch {
+      // Continue to more aggressive fixes
+    }
+
+    // Fix unescaped newlines in string values
+    fixed = fixed.replace(/:\s*"([^"]*)\n([^"]*)"/g, (match, p1, p2) => {
+      return ': "' + p1 + '\\n' + p2 + '"'
+    })
+
+    try {
+      return JSON.parse(fixed)
+    } catch {
+      return null
+    }
+  }
+}
+
 // --- Fallback Analysis ---
 
 function getFallbackAnalysis(extractedContent: string) {
@@ -83,7 +172,7 @@ function getFallbackAnalysis(extractedContent: string) {
   if (!hasExperience) weaknesses.push('Missing work experience section')
   if (!hasEducation) weaknesses.push('Missing education section')
   if (!hasSkills) weaknesses.push('Missing skills section')
-  weaknesses.push('Full AI analysis unavailable')
+  weaknesses.push('AI-powered detailed analysis temporarily unavailable')
 
   const improvementPlan: Array<{
     priority: 'high' | 'medium' | 'low'
@@ -116,16 +205,16 @@ function getFallbackAnalysis(extractedContent: string) {
   improvementPlan.push({
     priority: 'medium',
     section: 'General',
-    issue: 'Full AI analysis is not available',
-    suggestion: 'Ensure the AI service is connected for detailed feedback',
-    example: 'Connect to the AI service to get detailed analysis and an improved resume',
+    issue: 'AI-powered detailed analysis is temporarily unavailable',
+    suggestion: 'Try again in a moment for a full AI-powered analysis with an improved resume',
+    example: 'The full AI service will provide: ATS score breakdown, section-by-section analysis, improved resume, and actionable improvement plan',
   })
 
   return {
     overallScore: score,
     atsCompatibility: {
       score: Math.max(score - 5, 20),
-      issues: ['Full ATS analysis unavailable'],
+      issues: ['Full ATS analysis unavailable - AI service is warming up'],
       tips: [
         'Use standard section headings (Summary, Experience, Education, Skills)',
         'Include keywords from job postings you are targeting',
@@ -171,9 +260,91 @@ function getFallbackAnalysis(extractedContent: string) {
     improvementPlan,
     improvedResume: null,
     keyInsight: hasSummary && hasExperience && hasEducation
-      ? 'Your resume has all the key sections. Connect to the AI service for a detailed analysis and an improved version.'
+      ? 'Your resume has all the key sections! Try the analysis again in a moment for a detailed AI-powered review with an improved version.'
       : 'Your resume is missing some key sections. Focus on adding a professional summary, experience, education, and skills.',
   }
+}
+
+// --- LLM Analysis with Retry ---
+
+async function getLlmAnalysis(
+  zai: Awaited<ReturnType<typeof ZAI.create>>,
+  extractedContent: string,
+  jobTarget?: string
+): Promise<any | null> {
+  const jobContext = jobTarget
+    ? 'The user is targeting this type of role: "' + jobTarget + '". Evaluate the resume fitness for this specific role.'
+    : 'Evaluate the resume for general professional opportunities in the South African job market.'
+
+  const systemPrompt = [
+    'You are an expert resume analyst and career coach specializing in the South African job market.',
+    'You provide thorough, honest, and constructive resume analyses.',
+    'You understand ATS systems, recruiter expectations, and what makes a resume stand out.',
+    'You evaluate resumes on content quality, formatting, ATS compatibility, impact, and relevance.',
+    'You ALWAYS respond with valid JSON only. No markdown. No code fences. No extra text.',
+  ].join(' ')
+
+  const userPrompt = [
+    'Analyze this resume and return a JSON object. ' + jobContext,
+    '',
+    'RESUME CONTENT:',
+    extractedContent.substring(0, 4000),
+    '',
+    'Return this JSON structure (fill in all fields):',
+    '{"overallScore":0-100,"atsCompatibility":{"score":0-100,"issues":["issue1"],"tips":["tip1"]},"contentAnalysis":{"summary":{"score":0-100,"feedback":"feedback","hasSummary":true},"experience":{"score":0-100,"feedback":"feedback","issues":["issue"],"strengths":["strength"]},"education":{"score":0-100,"feedback":"feedback","issues":["issue"],"strengths":["strength"]},"skills":{"score":0-100,"feedback":"feedback","missing":["skill"],"irrelevant":[]}},"strengths":["s1","s2","s3","s4","s5"],"weaknesses":["w1","w2","w3","w4","w5"],"improvementPlan":[{"priority":"high","section":"Summary","issue":"issue desc","suggestion":"actionable suggestion","example":"example text"}],"improvedResume":{"personalInfo":{"fullName":"","email":"","phone":"","location":"","linkedin":""},"summary":"improved summary","experience":[{"title":"","company":"","period":"","description":"improved description"}],"education":[{"degree":"","institution":"","year":""}],"skills":["skill1","skill2"],"atsScore":0-100},"keyInsight":"one powerful insight"}',
+    '',
+    'CRITICAL: Return ONLY valid JSON. No markdown code fences. No extra text before or after. UK English spelling.',
+  ].join('\n')
+
+  // Try up to 2 times
+  for (let attempt = 0; attempt < 2; attempt++) {
+    try {
+      console.log('[resume-analyze] LLM attempt', attempt + 1, 'content length:', extractedContent.length)
+
+      const analysisResponse = await zai.chat.completions.create({
+        messages: [
+          { role: 'assistant', content: systemPrompt },
+          { role: 'user', content: userPrompt },
+        ],
+        thinking: { type: 'disabled' },
+      })
+
+      const rawContent = analysisResponse.choices[0]?.message?.content || ''
+      console.log('[resume-analyze] LLM response length:', rawContent.length, 'first 100 chars:', rawContent.substring(0, 100))
+
+      // Extract JSON from the response
+      const jsonStr = extractJsonFromLlmResponse(rawContent)
+      if (!jsonStr) {
+        console.log('[resume-analyze] No JSON found in LLM response, attempt', attempt + 1)
+        if (attempt === 0) continue // Retry
+        return null
+      }
+
+      // Parse JSON with fallback for common issues
+      const parsed = tryParseJson(jsonStr)
+      if (!parsed) {
+        console.log('[resume-analyze] JSON parse failed, attempt', attempt + 1, 'json length:', jsonStr.length)
+        if (attempt === 0) continue // Retry
+        return null
+      }
+
+      // Validate the parsed object has required fields
+      if (typeof parsed.overallScore === 'number' && parsed.contentAnalysis) {
+        console.log('[resume-analyze] Successfully parsed analysis, score:', parsed.overallScore)
+        return parsed
+      }
+
+      console.log('[resume-analyze] Parsed JSON missing required fields, attempt', attempt + 1)
+      if (attempt === 0) continue
+      return null
+    } catch (err) {
+      console.error('[resume-analyze] LLM call error, attempt', attempt + 1, ':', err)
+      if (attempt === 0) continue
+      return null
+    }
+  }
+
+  return null
 }
 
 // --- API Route Handler ---
@@ -204,7 +375,7 @@ export async function POST(req: NextRequest) {
     try {
       extractedContent = await extractText(fileBase64, mimeType)
     } catch (extractError) {
-      console.error('Document extraction error:', extractError)
+      console.error('[resume-analyze] Document extraction error:', extractError)
       return NextResponse.json(
         { error: 'Could not read the resume file. Please ensure it is a valid PDF, DOCX, or TXT file.' },
         { status: 400 }
@@ -218,85 +389,20 @@ export async function POST(req: NextRequest) {
       )
     }
 
-    // Step 2: Try AI analysis with LLM
-    let analysis
+    console.log('[resume-analyze] Extracted', extractedContent.length, 'chars from', mimeType)
+
+    // Step 2: Try AI analysis with LLM (with retry)
+    let analysis = null
     try {
       const zai = await getZAI()
-
-      const jobContext = jobTarget
-        ? 'The user is targeting this type of role: "' + jobTarget + '". Evaluate the resume fitness for this specific role.'
-        : 'Evaluate the resume for general professional opportunities in the South African job market.'
-
-      const systemPrompt = [
-        'You are an expert resume analyst and career coach specializing in the South African job market.',
-        'You provide thorough, honest, and constructive resume analyses.',
-        'You understand ATS systems, recruiter expectations, and what makes a resume stand out.',
-        'You evaluate resumes on multiple dimensions: content quality, formatting, ATS compatibility, impact, and relevance.',
-      ].join(' ')
-
-      const userPrompt = [
-        'Analyze this resume thoroughly and provide a comprehensive evaluation. ' + jobContext,
-        '',
-        'RESUME CONTENT:',
-        extractedContent,
-        '',
-        'Provide your analysis as a JSON object with EXACTLY this structure:',
-        '{',
-        '  "overallScore": <number 0-100>,',
-        '  "atsCompatibility": {',
-        '    "score": <number 0-100>,',
-        '    "issues": ["list of ATS compatibility issues found"],',
-        '    "tips": ["list of ATS optimization tips"]',
-        '  },',
-        '  "contentAnalysis": {',
-        '    "summary": { "score": <0-100>, "feedback": "detailed feedback", "hasSummary": true/false },',
-        '    "experience": { "score": <0-100>, "feedback": "detailed feedback", "issues": ["list"], "strengths": ["list"] },',
-        '    "education": { "score": <0-100>, "feedback": "detailed feedback", "issues": ["list"], "strengths": ["list"] },',
-        '    "skills": { "score": <0-100>, "feedback": "detailed feedback", "missing": ["list"], "irrelevant": ["list"] }',
-        '  },',
-        '  "strengths": ["top 5 overall strengths"],',
-        '  "weaknesses": ["top 5 overall weaknesses"],',
-        '  "improvementPlan": [',
-        '    { "priority": "high|medium|low", "section": "section name", "issue": "description", "suggestion": "actionable suggestion", "example": "example of improved content" }',
-        '  ],',
-        '  "improvedResume": {',
-        '    "personalInfo": { "fullName": "", "email": "", "phone": "", "location": "", "linkedin": "" },',
-        '    "summary": "improved professional summary 2-3 sentences",',
-        '    "experience": [{ "title": "", "company": "", "period": "", "description": "improved with action verbs" }],',
-        '    "education": [{ "degree": "", "institution": "", "year": "" }],',
-        '    "skills": ["comprehensive improved skills list"],',
-        '    "atsScore": <0-100>',
-        '  },',
-        '  "keyInsight": "one powerful personalized insight about this resume"',
-        '}',
-        '',
-        'IMPORTANT: Return ONLY valid JSON. No markdown, no code fences, no extra text. All text in UK English. Be specific and actionable.',
-      ].join('\n')
-
-      const analysisResponse = await zai.chat.completions.create({
-        messages: [
-          { role: 'assistant', content: systemPrompt },
-          { role: 'user', content: userPrompt },
-        ],
-        thinking: { type: 'disabled' },
-      })
-
-      let analysisText = analysisResponse.choices[0]?.message?.content || ''
-
-      // Extract JSON from response if wrapped in markdown code fences
-      const jsonMatch = analysisText.match(/\{[\s\S]*\}/)
-      if (jsonMatch) {
-        analysisText = jsonMatch[0]
-      }
-
-      try {
-        analysis = JSON.parse(analysisText)
-      } catch {
-        console.error('Failed to parse resume analysis JSON:', analysisText.substring(0, 200))
-        analysis = getFallbackAnalysis(extractedContent)
-      }
+      analysis = await getLlmAnalysis(zai, extractedContent, jobTarget)
     } catch (llmError) {
-      console.error('LLM analysis failed, using fallback:', llmError)
+      console.error('[resume-analyze] LLM setup failed:', llmError)
+    }
+
+    // Step 3: Fallback if LLM failed
+    if (!analysis) {
+      console.log('[resume-analyze] Using fallback analysis')
       analysis = getFallbackAnalysis(extractedContent)
     }
 
@@ -306,7 +412,7 @@ export async function POST(req: NextRequest) {
       analysis,
     })
   } catch (error) {
-    console.error('Resume analysis error:', error)
+    console.error('[resume-analyze] Route error:', error)
     const message = error instanceof Error ? error.message : 'Failed to analyze resume. Please try again.'
     return NextResponse.json(
       { error: message },

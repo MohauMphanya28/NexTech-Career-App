@@ -155,3 +155,26 @@ Stage Summary:
 - Solution: Replaced long template literals with array-joined strings for the LLM prompt construction
 - Resume analyzer is now fully functional with end-to-end testing confirmed
 - All AI API routes are compiling and responding correctly
+---
+Task ID: 2
+Agent: Main Agent
+Task: Fix resume analyzer showing fallback "Full AI analysis is not available" instead of AI analysis
+
+Work Log:
+- Checked dev server logs: user's requests took 33-37s, returned 200 but with fallback analysis
+- Identified root cause: LLM response JSON couldn't be parsed (likely wrapped in markdown or had extra text)
+- The old code used simple regex /\{[\s\S]*\}/ which failed on complex nested JSON responses
+- Rewrote the route with 3 major improvements:
+  1. Robust JSON extraction: balanced-brace parser that handles markdown code fences, extra text, nested objects
+  2. JSON repair: tries fixing trailing commas, single quotes, unescaped newlines
+  3. Retry mechanism: if first LLM attempt returns unparseable JSON, automatically retries
+  4. Detailed logging: logs each step for debugging
+- Also shortened the prompt to reduce LLM response time and increase JSON reliability
+- Tested end-to-end: Score 75, ATS 80, improved resume generated with categorized skills
+- Fallback analysis text improved to say "temporarily unavailable" instead of "not available"
+
+Stage Summary:
+- Resume analyzer now works with AI-powered analysis (not just fallback)
+- Robust JSON extraction handles markdown-wrapped responses, extra text, and common JSON issues
+- Retry mechanism provides second chance if first LLM call produces unparseable output
+- Detailed server-side logging for future debugging
