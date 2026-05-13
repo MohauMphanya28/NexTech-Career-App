@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useCallback } from 'react'
+import { useState, useCallback, useEffect } from 'react'
 import {
   Sparkles,
   Mail,
@@ -21,6 +21,7 @@ type AuthMode = 'login' | 'register'
 export default function AuthScreen() {
   const { setUser, setDbUserId, setIsAuthenticated, setCurrentView } = useAppStore()
 
+  const [mounted, setMounted] = useState(false)
   const [mode, setMode] = useState<AuthMode>('login')
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
@@ -28,6 +29,14 @@ export default function AuthScreen() {
   const [showPassword, setShowPassword] = useState(false)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
+
+  // Prevent hydration mismatch: browser extensions (password managers, autofill)
+  // inject `fdprocessedid` attributes into form elements before React hydrates,
+  // causing a server/client DOM mismatch. By deferring the form render until
+  // after mount, we skip SSR entirely for the form and eliminate the mismatch.
+  useEffect(() => {
+    setMounted(true)
+  }, [])
 
   const handleSubmit = useCallback(async (e: React.FormEvent) => {
     e.preventDefault()
@@ -69,7 +78,6 @@ export default function AuthScreen() {
         return
       }
 
-      // Success — set user in store
       const apiUser = data.user
       const profileData = {
         id: apiUser.id,
@@ -91,7 +99,6 @@ export default function AuthScreen() {
       setDbUserId(apiUser.id)
       setIsAuthenticated(true)
 
-      // Store auth state in localStorage for persistence
       if (typeof window !== 'undefined') {
         localStorage.setItem('nextech_auth', JSON.stringify({
           userId: apiUser.id,
@@ -101,7 +108,6 @@ export default function AuthScreen() {
 
       toast.success(mode === 'login' ? 'Welcome back!' : 'Account created successfully!')
 
-      // Navigate based on onboarding status
       if (apiUser.onboardingDone) {
         setCurrentView('dashboard')
       } else {
@@ -121,25 +127,41 @@ export default function AuthScreen() {
 
   const isRegister = mode === 'register'
 
+  // Pre-mount: show a branded loading state (NOT a blank screen).
+  // This avoids SSR hydration mismatches from browser extensions
+  // that inject fdprocessedid attributes into form elements.
+  if (!mounted) {
+    return (
+      <div className="flex min-h-screen flex-col items-center justify-center bg-background">
+        <div className="flex size-16 items-center justify-center rounded-2xl bg-teal-400/15 border border-teal-400/30 mb-4">
+          <Sparkles className="size-8 text-teal-400" />
+        </div>
+        <h1 className="gradient-text text-3xl font-bold tracking-tight">NexTech</h1>
+        <p className="text-sm text-muted-foreground mt-1">Your AI-Powered Career Mentor</p>
+        <div className="mt-6 size-6 border-2 border-teal-400/30 border-t-teal-400 rounded-full animate-spin" />
+      </div>
+    )
+  }
+
   return (
     <div className="flex min-h-screen flex-col bg-background">
-      {/* Hero Section — pure CSS animations, no Framer Motion */}
+      {/* Hero Section */}
       <div className="flex-shrink-0 relative overflow-hidden">
         <div className="absolute inset-0 bg-gradient-to-br from-teal-500/10 via-background to-cyan-500/5" />
         <div className="relative px-6 pt-16 pb-8 text-center">
-          <div className="flex size-16 mx-auto items-center justify-center rounded-2xl bg-teal-400/15 border border-teal-400/30 mb-4 animate-in fade-in zoom-in-95 duration-500">
+          <div className="flex size-16 mx-auto items-center justify-center rounded-2xl bg-teal-400/15 border border-teal-400/30 mb-4">
             <Sparkles className="size-8 text-teal-400" />
           </div>
-          <h1 className="gradient-text text-3xl font-bold tracking-tight animate-in fade-in slide-in-from-bottom-2 duration-500 delay-100">
+          <h1 className="gradient-text text-3xl font-bold tracking-tight">
             NexTech
           </h1>
-          <p className="text-sm text-muted-foreground mt-1 animate-in fade-in slide-in-from-bottom-2 duration-500 delay-200">
+          <p className="text-sm text-muted-foreground mt-1">
             Your AI-Powered Career Mentor
           </p>
         </div>
       </div>
 
-      {/* Auth Form */}
+      {/* Auth Form — client-only to avoid hydration mismatch from browser extensions */}
       <div className="flex-1 px-6 pb-8">
         <form onSubmit={handleSubmit} className="space-y-4">
           {/* Mode Title */}
@@ -219,7 +241,7 @@ export default function AuthScreen() {
 
           {/* Error Message */}
           {error && (
-            <div className="rounded-xl bg-red-500/10 border border-red-500/30 px-4 py-3 text-sm text-red-400 animate-in fade-in slide-in-from-top-1 duration-200">
+            <div className="rounded-xl bg-red-500/10 border border-red-500/30 px-4 py-3 text-sm text-red-400">
               {error}
             </div>
           )}
