@@ -1,11 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server'
 import ZAI from 'z-ai-web-dev-sdk'
+import { PDFParse } from 'pdf-parse'
+import path from 'path'
+import mammoth from 'mammoth'
 
 // ─── Resume Analyzer API Route ──────────────────────────────────────────────
-// Step 1: Proxies to the Document Extraction mini-service (port 3031) for PDF/DOCX parsing
-// Step 2: Uses LLM (z-ai-web-dev-sdk) directly for analysis (same pattern as chat route)
-
-const EXTRACTION_SERVICE_URL = 'http://localhost:3031/'
+// Extracts text from PDF/DOCX directly (no external mini-service needed)
+// Then uses LLM (z-ai-web-dev-sdk) for analysis
 
 let zaiInstance: Awaited<ReturnType<typeof ZAI.create>> | null = null
 
@@ -16,23 +17,152 @@ async function getZAI() {
   return zaiInstance
 }
 
-function getFallbackAnalysis() {
+// ─── Text Extraction (inline — no mini-service needed) ──────────────────────
+
+async function extractTextFromPdf(base64: string): Promise<string> {
+  const buffer = Buffer.from(base64, 'base64')
+  const uint8 = new Uint8Array(buffer)
+  let standardFontDataUrl: string | undefined
+  try {
+    const pdfjsDistPath = require.resolve('pdfjs-dist/package.json')
+    standardFontDataUrl = path.join(path.dirname(pdfjsDistPath), 'standard_fonts') + '/'
+  } catch {
+    // No standard fonts available — will still work for most PDFs
+  }
+  const parser = new PDFParse(uint8, standardFontDataUrl ? { standardFontDataUrl } : {})
+  await parser.load()
+  const result = await parser.getText()
+  return result.text || ''
+}
+
+async function extractTextFromDocx(base64: string): Promise<string> {
+  const buffer = Buffer.from(base64, 'base64')
+  const result = await mammoth.extractRawText({ buffer })
+  return result.value || ''
+}
+
+function extractTextFromTxt(base64: string): string {
+  return Buffer.from(base64, 'base64').toString('utf-8')
+}
+
+async function extractText(base64: string, mimeType: string): Promise<string> {
+  if (mimeType === 'application/pdf') return extractTextFromPdf(base64)
+  if (
+    mimeType === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' ||
+    mimeType === 'application/msword'
+  ) return extractTextFromDocx(base64)
+  return extractTextFromTxt(base64)
+}
+
+// ─── Fallback Analysis ──────────────────────────────────────────────────────
+
+function getFallbackAnalysis(extractedContent: string) {
+  // Try to give a basic analysis based on the extracted content
+  const hasSummary = /summary|objective|profile|about/i.test(extractedContent)
+  const hasExperience = /experience|employment|work history/i.test(extractedContent)
+  const hasEducation = /education|qualification|degree/i.test(extractedContent)
+  const hasSkills = /skills|competencies|technologies/i.test(extractedContent)
+  const wordCount = extractedContent.split(/\s+/).length
+
+  let score = 30
+  if (hasSummary) score += 10
+  if (hasExperience) score += 15
+  if (hasEducation) score += 10
+  if (hasSkills) score += 10
+  if (wordCount > 100) score += 5
+  if (wordCount > 300) score += 10
+  score = Math.min(score, 75)
+
   return {
-    overallScore: 50,
-    atsCompatibility: { score: 45, issues: ['Could not complete full ATS analysis'], tips: ['Ensure your resume uses standard section headings', 'Include relevant keywords from job postings'] },
-    contentAnalysis: {
-      summary: { score: 40, feedback: 'Summary section needs improvement', hasSummary: false },
-      experience: { score: 45, feedback: 'Experience descriptions need more detail and action verbs', issues: ['Add quantifiable achievements'], strengths: [] },
-      education: { score: 50, feedback: 'Education section is adequate', issues: [], strengths: [] },
-      skills: { score: 40, feedback: 'Skills section needs expansion', missing: ['Add more relevant skills'], irrelevant: [] },
+    overallScore: score,
+    atsCompatibility: {
+      score: Math.max(score - 5, 20),
+      issues: ['Full ATS analysis unavailable — AI service not connected'],
+      tips: [
+        'Use standard section headings (Summary, Experience, Education, Skills)',
+        'Include keywords from job postings you are targeting',
+        'Avoid tables, graphics, or unusual fonts that ATS cannot parse',
+        'Save as PDF with standard formatting for best ATS compatibility',
+      ],
     },
-    strengths: ['Resume has been created and submitted for analysis'],
-    weaknesses: ['Full analysis could not be completed - please try again'],
-    improvementPlan: [],
+    contentAnalysis: {
+      summary: {
+        score: hasSummary ? 55 : 25,
+        feedback: hasSummary
+          ? 'A summary section was detected. Ensure it is concise (2-3 sentences), highlights your key qualifications, and includes relevant keywords.'
+          : 'No professional summary detected. Add a 2-3 sentence summary at the top highlighting your key skills, experience level, and career goals.',
+        hasSummary,
+      },
+      experience: {
+        score: hasExperience ? 50 : 20,
+        feedback: hasExperience
+          ? 'Experience section found. Use strong action verbs (managed, developed, implemented), include quantifiable achievements, and tailor descriptions to the role you want.'
+          : 'No experience section detected. List your work experience with job titles, companies, dates, and achievement-focused descriptions.',
+        issues: hasExperience ? ['Add more quantifiable achievements (numbers, percentages, metrics)'] : ['No experience section found'],
+        strengths: hasExperience ? ['Experience section is present'] : [],
+      },
+      education: {
+        score: hasEducation ? 55 : 25,
+        feedback: hasEducation
+          ? 'Education section detected. Include degree, institution, year, and any relevant achievements or coursework.'
+          : 'No education section detected. Add your qualifications including degree, institution, and year.',
+        issues: hasEducation ? [] : ['No education section found'],
+        strengths: hasEducation ? ['Education section is present'] : [],
+      },
+      skills: {
+        score: hasSkills ? 50 : 20,
+        feedback: hasSkills
+          ? 'Skills section found. Ensure you include both technical and soft skills relevant to your target role.'
+          : 'No dedicated skills section detected. Add a skills section listing both technical abilities and soft skills relevant to your field.',
+        missing: ['Add skills relevant to your target role'],
+        irrelevant: [],
+      },
+    },
+    strengths: [
+      'Resume has been submitted for analysis',
+      ...(hasSummary ? ['Professional summary is present'] : []),
+      ...(hasExperience ? ['Work experience section is present'] : []),
+      ...(hasEducation ? ['Education section is present'] : []),
+      ...(hasSkills ? ['Skills section is present'] : []),
+    ].slice(0, 5),
+    weaknesses: [
+      ...(!hasSummary ? ['Missing professional summary — critical for first impressions'] : []),
+      ...(!hasExperience ? ['Missing work experience section'] : []),
+      ...(!hasEducation ? ['Missing education section'] : []),
+      ...(!hasSkills ? ['Missing skills section — important for ATS and recruiter scanning'] : []),
+      'Full AI analysis unavailable — connect to AI service for detailed feedback',
+    ].slice(0, 5),
+    improvementPlan: [
+      ...(!hasSummary ? [{
+        priority: 'high' as const,
+        section: 'Summary',
+        issue: 'No professional summary found',
+        suggestion: 'Add a 2-3 sentence professional summary at the top of your resume',
+        example: 'Dynamic and detail-oriented Computer Science graduate with hands-on experience in full-stack development. Proven ability to deliver user-focused solutions through internships and academic projects. Seeking to leverage technical skills in a junior developer role.',
+      }] : []),
+      ...(!hasSkills ? [{
+        priority: 'high' as const,
+        section: 'Skills',
+        issue: 'No skills section found',
+        suggestion: 'Add a skills section listing your technical and soft skills',
+        example: 'Skills: JavaScript, Python, React, Node.js, SQL, Git, Problem-Solving, Team Collaboration, Communication',
+      }] : []),
+      {
+        priority: 'medium' as const,
+        section: 'General',
+        issue: 'Full AI analysis is not available',
+        suggestion: 'Ensure the AI service is connected for detailed, personalised feedback with an improved resume',
+        example: 'Connect to the AI service to get: ATS score breakdown, section-by-section analysis, improved resume, and actionable improvement plan',
+      },
+    ],
     improvedResume: null,
-    keyInsight: 'Your resume is a work in progress - every improvement brings you closer to your dream job!',
+    keyInsight: hasSummary && hasExperience && hasEducation
+      ? 'Your resume has all the key sections — connect to the AI service for a detailed analysis and an improved version!'
+      : 'Your resume is missing some key sections. Focus on adding a professional summary, experience, education, and skills to make it stand out!',
   }
 }
+
+// ─── API Route Handler ──────────────────────────────────────────────────────
 
 export async function POST(req: NextRequest) {
   try {
@@ -55,38 +185,17 @@ export async function POST(req: NextRequest) {
       )
     }
 
-    // Step 1: Extract text from document
+    // Step 1: Extract text from document (directly — no mini-service)
     let extractedContent = ''
 
-    if (mimeType === 'text/plain') {
-      // TXT files can be read directly
-      extractedContent = Buffer.from(fileBase64, 'base64').toString('utf-8')
-    } else {
-      // PDF/DOCX: call the extraction mini-service
-      try {
-        const extractRes = await fetch(EXTRACTION_SERVICE_URL, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ fileBase64, mimeType }),
-        })
-
-        const extractData = await extractRes.json()
-
-        if (!extractRes.ok || !extractData.success) {
-          return NextResponse.json(
-            { error: extractData.error || 'Could not read the resume file. Please ensure it is a valid PDF, DOCX, or TXT file.' },
-            { status: 400 }
-          )
-        }
-
-        extractedContent = extractData.extractedContent || ''
-      } catch (fetchError) {
-        console.error('Extraction service error:', fetchError)
-        return NextResponse.json(
-          { error: 'Resume analysis service is unavailable. Please try again in a moment.' },
-          { status: 503 }
-        )
-      }
+    try {
+      extractedContent = await extractText(fileBase64, mimeType)
+    } catch (extractError) {
+      console.error('Document extraction error:', extractError)
+      return NextResponse.json(
+        { error: 'Could not read the resume file. Please ensure it is a valid PDF, DOCX, or TXT file.' },
+        { status: 400 }
+      )
     }
 
     if (!extractedContent.trim()) {
@@ -96,21 +205,23 @@ export async function POST(req: NextRequest) {
       )
     }
 
-    // Step 2: Analyze the extracted content using LLM (same pattern as /api/ai/chat)
-    const zai = await getZAI()
-    const jobContext = jobTarget
-      ? `The user is targeting this type of role: "${jobTarget}". Evaluate the resume's fitness for this specific role.`
-      : 'Evaluate the resume for general professional opportunities in the South African job market.'
+    // Step 2: Try AI analysis with LLM
+    let analysis
+    try {
+      const zai = await getZAI()
+      const jobContext = jobTarget
+        ? `The user is targeting this type of role: "${jobTarget}". Evaluate the resume's fitness for this specific role.`
+        : 'Evaluate the resume for general professional opportunities in the South African job market.'
 
-    const analysisResponse = await zai.chat.completions.create({
-      messages: [
-        {
-          role: 'assistant',
-          content: `You are an expert resume analyst and career coach specializing in the South African job market. You provide thorough, honest, and constructive resume analyses. You understand ATS systems, recruiter expectations, and what makes a resume stand out. You evaluate resumes on multiple dimensions: content quality, formatting, ATS compatibility, impact, and relevance.`,
-        },
-        {
-          role: 'user',
-          content: `Analyze this resume thoroughly and provide a comprehensive evaluation. ${jobContext}
+      const analysisResponse = await zai.chat.completions.create({
+        messages: [
+          {
+            role: 'assistant',
+            content: `You are an expert resume analyst and career coach specializing in the South African job market. You provide thorough, honest, and constructive resume analyses. You understand ATS systems, recruiter expectations, and what makes a resume stand out. You evaluate resumes on multiple dimensions: content quality, formatting, ATS compatibility, impact, and relevance.`,
+          },
+          {
+            role: 'user',
+            content: `Analyze this resume thoroughly and provide a comprehensive evaluation. ${jobContext}
 
 RESUME CONTENT:
 ${extractedContent}
@@ -190,25 +301,28 @@ Provide your analysis as a JSON object with EXACTLY this structure:
 }
 
 IMPORTANT: Return ONLY valid JSON. No markdown, no code fences, no extra text. All text should be in UK English (South African standard). Be specific and actionable in all feedback.`,
-        },
-      ],
-      thinking: { type: 'disabled' },
-    })
+          },
+        ],
+        thinking: { type: 'disabled' },
+      })
 
-    let analysisText = analysisResponse.choices[0]?.message?.content || ''
+      let analysisText = analysisResponse.choices[0]?.message?.content || ''
 
-    // Extract JSON from response if wrapped in markdown code fences
-    const jsonMatch = analysisText.match(/\{[\s\S]*\}/)
-    if (jsonMatch) {
-      analysisText = jsonMatch[0]
-    }
+      // Extract JSON from response if wrapped in markdown code fences
+      const jsonMatch = analysisText.match(/\{[\s\S]*\}/)
+      if (jsonMatch) {
+        analysisText = jsonMatch[0]
+      }
 
-    let analysis
-    try {
-      analysis = JSON.parse(analysisText)
-    } catch {
-      console.error('Failed to parse resume analysis JSON:', analysisText.substring(0, 200))
-      analysis = getFallbackAnalysis()
+      try {
+        analysis = JSON.parse(analysisText)
+      } catch {
+        console.error('Failed to parse resume analysis JSON:', analysisText.substring(0, 200))
+        analysis = getFallbackAnalysis(extractedContent)
+      }
+    } catch (llmError) {
+      console.error('LLM analysis failed, using fallback:', llmError)
+      analysis = getFallbackAnalysis(extractedContent)
     }
 
     return NextResponse.json({
