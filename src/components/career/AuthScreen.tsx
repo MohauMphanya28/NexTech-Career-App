@@ -62,9 +62,16 @@ export default function AuthScreen() {
         }),
       })
 
+      if (!res.ok) {
+        let errorMsg = 'Something went wrong'
+        try { const e = await res.json(); errorMsg = e.error || errorMsg } catch { errorMsg = `Server error (${res.status}). Please try again.` }
+        setError(errorMsg)
+        return
+      }
+
       const data = await res.json()
 
-      if (!res.ok || !data.success) {
+      if (!data.success) {
         setError(data.error || 'Something went wrong')
         return
       }

@@ -195,6 +195,16 @@ export default function CoverLetterGenerator() {
         }),
       })
 
+      if (!res.ok) {
+        let errorMsg = 'Could not generate your cover letter. Please try again.'
+        try { const e = await res.json(); errorMsg = e.error || errorMsg } catch { errorMsg = `Server error (${res.status}). Please try again.` }
+        clearInterval(progressInterval)
+        setGenerationProgress(0)
+        setPhase('input')
+        toast.error(errorMsg)
+        return
+      }
+
       const data = await res.json()
 
       clearInterval(progressInterval)
@@ -208,7 +218,7 @@ export default function CoverLetterGenerator() {
         setPhase('preview')
       } else {
         setPhase('input')
-        toast.error('Could not generate your cover letter. Please try again.')
+        toast.error(data.error || 'Could not generate your cover letter. Please try again.')
       }
     } catch {
       clearInterval(progressInterval)

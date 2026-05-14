@@ -323,9 +323,21 @@ export default function ResumeAnalyzer() {
 
       setAnalysisProgress(85)
 
+      if (!res.ok) {
+        let errorMsg = 'Analysis failed. Please try again.'
+        try {
+          const errData = await res.json()
+          errorMsg = errData.error || errorMsg
+        } catch {
+          // Response was not JSON (e.g. "Internal Server Error" plain text)
+          errorMsg = `Server error (${res.status}). Please try again in a moment.`
+        }
+        throw new Error(errorMsg)
+      }
+
       const data = await res.json()
 
-      if (!res.ok || !data.success) {
+      if (!data.success) {
         throw new Error(data.error || 'Analysis failed')
       }
 

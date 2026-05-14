@@ -1321,6 +1321,14 @@ export default function InterviewCoach() {
         }),
       })
 
+      if (!res.ok) {
+        let errorMsg = 'Could not start interview. Please try again.'
+        try { const e = await res.json(); errorMsg = e.error || errorMsg } catch { errorMsg = `Server error (${res.status}). Please try again.` }
+        toast.error(errorMsg)
+        setAiTyping(false)
+        return
+      }
+
       const data = await res.json()
 
       if (data.success) {
@@ -1431,6 +1439,15 @@ export default function InterviewCoach() {
           } : null,
         }),
       })
+
+      if (!res.ok) {
+        let errorMsg = 'Could not evaluate answer. Please try again.'
+        try { const e = await res.json(); errorMsg = e.error || errorMsg } catch { errorMsg = `Server error (${res.status}). Please try again.` }
+        toast.error(errorMsg)
+        setAiTyping(false)
+        setIsSending(false)
+        return
+      }
 
       const data = await res.json()
 
@@ -1702,6 +1719,14 @@ export default function InterviewCoach() {
             } : null,
           }),
         })
+
+        if (!res.ok) {
+          try { await res.json() } catch {}
+          setAiTyping(false)
+          setIsSending(false)
+          return
+        }
+
         const data = await res.json()
         if (data.success) {
           const nextMsg: ChatMessage = {

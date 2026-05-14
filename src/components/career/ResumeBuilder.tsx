@@ -317,6 +317,12 @@ export default function ResumeBuilder() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ message, type: 'resume' }),
       })
+
+      if (!res.ok) {
+        try { const e = await res.json(); toast.error(e.error || 'Server error. Please try again.') } catch { toast.error(`Server error (${res.status}). Please try again.`) }
+        return
+      }
+
       const data = await res.json()
       if (data.success && data.response) {
         setAiSummarySuggestion(data.response.trim())
@@ -348,6 +354,12 @@ export default function ResumeBuilder() {
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ message, type: 'resume' }),
         })
+
+        if (!res.ok) {
+          try { const e = await res.json(); toast.error(e.error || 'Server error. Please try again.') } catch { toast.error(`Server error (${res.status}). Please try again.`) }
+          return
+        }
+
         const data = await res.json()
         if (data.success && data.response) {
           setAiExpSuggestions((prev) => ({ ...prev, [expId]: data.response.trim() }))
@@ -397,6 +409,12 @@ export default function ResumeBuilder() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ message, type: 'resume' }),
       })
+
+      if (!res.ok) {
+        try { const e = await res.json(); toast.error(e.error || 'Server error. Please try again.') } catch { toast.error(`Server error (${res.status}). Please try again.`) }
+        return
+      }
+
       const data = await res.json()
       if (data.success && data.response) {
         const skills = data.response
@@ -449,13 +467,26 @@ export default function ResumeBuilder() {
         }),
       })
 
+      if (!res.ok) {
+        let errorMsg = 'Failed to generate resume. Please try again.'
+        try {
+          const errData = await res.json()
+          errorMsg = errData.error || errorMsg
+        } catch {
+          // Response was not JSON (e.g. "Internal Server Error" plain text)
+          errorMsg = `Server error (${res.status}). Please try again in a moment.`
+        }
+        toast.error(errorMsg)
+        return
+      }
+
       const data = await res.json()
       if (data.success && data.resume) {
         setGeneratedResume(data.resume)
         setAtsScore(data.resume.atsScore || 0)
         setSuggestions(data.resume.suggestions || [])
       } else {
-        toast.error('Could not generate resume. Please try again.')
+        toast.error(data.error || 'Could not generate resume. Please try again.')
       }
     } catch {
       toast.error('Something went wrong generating your resume.')
@@ -554,7 +585,12 @@ export default function ResumeBuilder() {
             name: resumeData.personalInfo?.fullName || 'User',
           }),
         })
-        const saveData = await saveRes.json()
+        let saveData: any = {}
+        try {
+          saveData = await saveRes.json()
+        } catch {
+          console.error('Failed to parse save response')
+        }
         if (saveData.success) {
           // Capture the resolved userId from the server (in case it was auto-created)
           if (saveData.userId && !storeState.dbUserId) {

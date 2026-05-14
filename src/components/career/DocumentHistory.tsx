@@ -154,6 +154,11 @@ export default function DocumentHistory() {
         ? `/api/career-documents?userId=${dbUserId}`
         : '/api/career-documents'
       const res = await fetch(url)
+      if (!res.ok) {
+        try { await res.json() } catch {}
+        setSavedDocuments([])
+        return
+      }
       const data = await res.json()
       if (data.success) {
         setSavedDocuments(data.documents)
