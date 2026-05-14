@@ -1,7 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
 import ZAI from 'z-ai-web-dev-sdk'
-import { PDFParse } from 'pdf-parse'
-import path from 'path'
 import mammoth from 'mammoth'
 
 let zaiInstance: Awaited<ReturnType<typeof ZAI.create>> | null = null
@@ -16,19 +14,22 @@ async function getZAI() {
 // --- Text Extraction ---
 
 async function extractTextFromPdf(base64: string): Promise<string> {
+  // Use unpdf — a serverless-friendly PDF parser that doesn't need web workers
+  // (pdfjs-dist requires a worker that Next.js can't bundle; pdf2json has format issues)
+  const { getDocumentProxy, extractText } = await import('unpdf')
+
   const buffer = Buffer.from(base64, 'base64')
   const uint8 = new Uint8Array(buffer)
-  let standardFontDataUrl: string | undefined
-  try {
-    const pdfjsDistPath = require.resolve('pdfjs-dist/package.json')
-    standardFontDataUrl = path.join(path.dirname(pdfjsDistPath), 'standard_fonts') + '/'
-  } catch {
-    // No standard fonts available
+
+  const pdf = await getDocumentProxy(uint8)
+  const result = await extractText(pdf)
+
+  // unpdf returns { totalPages, text: string[] }
+  if (result && Array.isArray(result.text)) {
+    return result.text.join('\n')
   }
-  const parser = new PDFParse(uint8, standardFontDataUrl ? { standardFontDataUrl } : {})
-  await parser.load()
-  const result = await parser.getText()
-  return result.text || ''
+
+  return ''
 }
 
 async function extractTextFromDocx(base64: string): Promise<string> {
@@ -63,7 +64,6 @@ function extractJsonFromLlmResponse(text: string): string | null {
   }
 
   // Strategy 2: Try to find a JSON object using balanced braces
-  // This is more reliable than regex for nested JSON
   const firstBrace = cleaned.indexOf('{')
   if (firstBrace === -1) return null
 
@@ -97,7 +97,7 @@ function extractJsonFromLlmResponse(text: string): string | null {
       depth--
       if (depth === 0) {
         lastValidEnd = i + 1
-        break // Found the outermost closing brace
+        break
       }
     }
   }
@@ -117,13 +117,9 @@ function tryParseJson(text: string): any | null {
   try {
     return JSON.parse(text)
   } catch {
-    // Try fixing common JSON issues
-
     // Fix trailing commas before } or ]
     let fixed = text.replace(/,\s*([\]}])/g, '$1')
 
-    // Fix single quotes instead of double quotes (common LLM mistake)
-    // Only outside of double-quoted strings
     try {
       return JSON.parse(fixed)
     } catch {
@@ -316,7 +312,7 @@ async function getLlmAnalysis(
       const jsonStr = extractJsonFromLlmResponse(rawContent)
       if (!jsonStr) {
         console.log('[resume-analyze] No JSON found in LLM response, attempt', attempt + 1)
-        if (attempt === 0) continue // Retry
+        if (attempt === 0) continue
         return null
       }
 
@@ -324,7 +320,7 @@ async function getLlmAnalysis(
       const parsed = tryParseJson(jsonStr)
       if (!parsed) {
         console.log('[resume-analyze] JSON parse failed, attempt', attempt + 1, 'json length:', jsonStr.length)
-        if (attempt === 0) continue // Retry
+        if (attempt === 0) continue
         return null
       }
 
