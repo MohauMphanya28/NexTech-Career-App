@@ -403,7 +403,7 @@ export default function OnboardingFlow() {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        message: `The user just answered "${value}" for the ${stepConfig.dataKey} question. Give a very brief (1 sentence max) encouraging response acknowledging their answer before asking the next question. Be warm and supportive.`,
+        message: `The user just answered "${value}" for the ${stepConfig.dataKey} question. Give a very brief (1 short sentence max) encouraging response acknowledging their answer. Do NOT ask any questions — the next question will be shown separately. Be warm and supportive.`,
         type: 'onboarding',
         context: messages.map(m => ({ role: m.role, content: m.content })),
       }),
