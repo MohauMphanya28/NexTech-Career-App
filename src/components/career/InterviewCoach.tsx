@@ -27,7 +27,7 @@ import {
   VideoOff,
   MessageCircle,
 } from 'lucide-react'
-import { useAppStore } from '@/lib/store'
+import { useAppStore, recordMilestone } from '@/lib/store'
 import InterviewAvatar from '@/components/career/InterviewAvatar'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -1534,6 +1534,13 @@ export default function InterviewCoach() {
                 }
                 setInterviewSession(completedSession)
                 setInterviewHistory([...interviewHistory, completedSession])
+              }
+
+              // Record milestone for progress tracking
+              const storeState = useAppStore.getState()
+              recordMilestone(storeState.dbUserId, 'interview', 'first-interview', 1)
+              if (overallScore >= 8) {
+                recordMilestone(storeState.dbUserId, 'interview', 'high-scorer', overallScore)
               }
 
               // Update career context with interview results

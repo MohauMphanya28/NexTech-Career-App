@@ -35,7 +35,12 @@ export async function GET(req: NextRequest) {
       }),
     ])
 
-    // Combine into a unified timeline
+    // Parse JSON fields safely
+    const safeParse = (str: string | null, fallback: unknown = []) => {
+      try { return str ? JSON.parse(str) : fallback } catch { return fallback }
+    }
+
+    // Combine into a unified timeline (with full data for session restoration)
     const documents = [
       ...resumes.map((r) => ({
         id: r.id,
@@ -46,9 +51,13 @@ export async function GET(req: NextRequest) {
         originalFileName: r.originalFileName,
         createdAt: r.createdAt.toISOString(),
         summary: r.summary,
-        skills: (() => { try { return JSON.parse(r.skills) } catch { return [] } })(),
-        personalInfo: (() => { try { return JSON.parse(r.personalInfo) } catch { return {} } })(),
+        skills: safeParse(r.skills, []),
+        personalInfo: safeParse(r.personalInfo, {}),
+        experience: safeParse(r.experience, []),
+        education: safeParse(r.education, []),
+        template: r.template,
         hasAnalysis: r.analysisData && r.analysisData !== '{}',
+        analysisData: safeParse(r.analysisData, {}),
       })),
       ...coverLetters.map((cl) => ({
         id: cl.id,
@@ -58,6 +67,8 @@ export async function GET(req: NextRequest) {
         jobTitle: cl.jobTitle,
         company: cl.company,
         tone: cl.tone,
+        content: cl.content,
+        jobDesc: cl.jobDesc,
         createdAt: cl.createdAt.toISOString(),
         wordCount: cl.content ? cl.content.trim().split(/\s+/).filter(Boolean).length : 0,
       })),
@@ -72,6 +83,9 @@ export async function GET(req: NextRequest) {
         clarity: iv.clarity,
         relevance: iv.relevance,
         completed: iv.completed,
+        questions: safeParse(iv.questions, []),
+        answers: safeParse(iv.answers, []),
+        feedback: safeParse(iv.feedback, []),
         createdAt: iv.createdAt.toISOString(),
       })),
     ]
@@ -79,7 +93,64 @@ export async function GET(req: NextRequest) {
     // Sort by creation date (newest first)
     documents.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
 
-    return NextResponse.json({ success: true, documents, userId: effectiveUserId })
+    // Build session data for Zustand store restoration
+    const sessionData = {
+      resumes: resumes.map((r) => ({
+        id: r.id,
+        title: r.title,
+        personalInfo: safeParse(r.personalInfo, {}),
+        summary: r.summary,
+        experience: safeParse(r.experience, []),
+        education: safeParse(r.education, []),
+        skills: safeParse(r.skills, []),
+        template: r.template,
+        atsScore: r.atsScore,
+      })),
+      interviewHistory: interviews.map((iv) => ({
+        id: iv.id,
+        type: iv.type,
+        industry: iv.industry,
+        messages: [] as Array<{ role: 'ai' | 'user'; content: string; timestamp: number }>,
+        score: iv.overallScore,
+        confidence: iv.confidence,
+        clarity: iv.clarity,
+        relevance: iv.relevance,
+        completed: iv.completed,
+        currentQuestion: 0,
+        totalQuestions: safeParse(iv.questions, []).length,
+      })),
+      latestCoverLetter: coverLetters.length > 0 ? {
+        content: coverLetters[0].content,
+        jobTitle: coverLetters[0].jobTitle,
+        company: coverLetters[0].company,
+        jobDesc: coverLetters[0].jobDesc,
+        tone: coverLetters[0].tone,
+      } : null,
+      careerContext: {
+        resumeJobTitle: resumes.length > 0 ? (safeParse(resumes[0].experience, [])[0]?.title || '') : '',
+        resumeCompany: resumes.length > 0 ? (safeParse(resumes[0].experience, [])[0]?.company || '') : '',
+        resumeSummary: resumes.length > 0 ? (resumes[0].summary || '') : '',
+        resumeSkills: resumes.length > 0 ? safeParse(resumes[0].skills, []) : [],
+        resumeExperience: resumes.length > 0 ? safeParse(resumes[0].experience, []) : [],
+        resumeEducation: resumes.length > 0 ? safeParse(resumes[0].education, []) : [],
+        resumeCompleted: resumes.length > 0,
+        coverLetterJobTitle: coverLetters.length > 0 ? (coverLetters[0].jobTitle || '') : '',
+        coverLetterCompany: coverLetters.length > 0 ? (coverLetters[0].company || '') : '',
+        coverLetterTone: coverLetters.length > 0 ? (coverLetters[0].tone || 'formal') : 'formal',
+        coverLetterCompleted: coverLetters.length > 0,
+        lastInterviewScore: interviews.length > 0 ? interviews[0].overallScore : 0,
+        interviewCompleted: interviews.length > 0 && interviews[0].completed,
+        currentStep: resumes.length > 0 && coverLetters.length > 0 && interviews.length > 0
+          ? 'complete' as const
+          : coverLetters.length > 0
+            ? 'interview' as const
+            : resumes.length > 0
+              ? 'cover-letter' as const
+              : 'resume' as const,
+      },
+    }
+
+    return NextResponse.json({ success: true, documents, sessionData, userId: effectiveUserId })
   } catch (error) {
     console.error('Fetch documents error:', error)
     return NextResponse.json({ error: 'Failed to fetch documents' }, { status: 500 })

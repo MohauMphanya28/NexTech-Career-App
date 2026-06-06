@@ -306,22 +306,46 @@ export default function OnboardingFlow() {
         setUser(profileData)
         setOnboardingStep(STEPS.length)
 
-        // Save to API and capture real DB user ID
-        fetch('/api/user', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            name: profileData.name,
-            location: profileData.location,
-            education: profileData.education,
-            field: profileData.field,
-            experience: profileData.experience,
-            skills: profileData.skills,
-            careerGoal: profileData.careerGoal,
-            onboardingDone: true,
-            onboardingStep: STEPS.length,
-          }),
-        })
+        // Save to API — use PUT if user already exists (e.g. from AuthScreen), POST otherwise
+        const storeState = useAppStore.getState()
+        const existingDbUserId = storeState.dbUserId
+        const existingUserEmail = storeState.user?.email
+
+        const savePromise = existingDbUserId
+          ? fetch('/api/user', {
+              method: 'PUT',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                id: existingDbUserId,
+                name: profileData.name,
+                location: profileData.location,
+                education: profileData.education,
+                field: profileData.field,
+                experience: profileData.experience,
+                skills: profileData.skills,
+                careerGoal: profileData.careerGoal,
+                onboardingDone: true,
+                onboardingStep: STEPS.length,
+              }),
+            })
+          : fetch('/api/user', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                name: profileData.name,
+                email: existingUserEmail || '',
+                location: profileData.location,
+                education: profileData.education,
+                field: profileData.field,
+                experience: profileData.experience,
+                skills: profileData.skills,
+                careerGoal: profileData.careerGoal,
+                onboardingDone: true,
+                onboardingStep: STEPS.length,
+              }),
+            })
+
+        savePromise
           .then(res => res.json())
           .then(apiData => {
             if (apiData.success && apiData.user?.id) {
@@ -334,7 +358,7 @@ export default function OnboardingFlow() {
               if (typeof window !== 'undefined') {
                 localStorage.setItem('nextech_auth', JSON.stringify({
                   userId: apiData.user.id,
-                  email: '',
+                  email: existingUserEmail || '',
                 }))
               }
             }

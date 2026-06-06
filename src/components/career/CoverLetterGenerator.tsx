@@ -12,6 +12,7 @@ import {
   Check,
   ArrowRight,
   Mic,
+  Download,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -19,7 +20,7 @@ import { Textarea } from '@/components/ui/textarea'
 import { Card, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group'
-import { useAppStore } from '@/lib/store'
+import { useAppStore, recordMilestone } from '@/lib/store'
 import { toast } from 'sonner'
 
 // ─── Types ───────────────────────────────────────────────────────────────────
@@ -126,6 +127,37 @@ export default function CoverLetterGenerator() {
   const [copied, setCopied] = useState(false)
   const [generationProgress, setGenerationProgress] = useState(0)
   const autoGenerateRef = useRef(false)
+  const coverLetterPreviewRef = useRef<HTMLDivElement>(null)
+
+  // ── PDF Export ────────────────────────────────────────────────────────────
+
+  const handleDownloadPDF = useCallback(async () => {
+    const element = coverLetterPreviewRef.current
+    if (!element || !editableContent) {
+      toast.error('No cover letter to download.')
+      return
+    }
+
+    try {
+      const html2pdf = (await import('html2pdf.js')).default
+      const filename = localCompany
+        ? `${localCompany}_Cover_Letter.pdf`
+        : 'Cover_Letter.pdf'
+      html2pdf()
+        .set({
+          margin: [15, 15, 15, 15],
+          filename,
+          image: { type: 'jpeg', quality: 0.98 },
+          html2canvas: { scale: 2, useCORS: true },
+          jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' },
+        })
+        .from(element)
+        .save()
+      toast.success('PDF downloaded!')
+    } catch {
+      window.print()
+    }
+  }, [editableContent, localCompany])
 
   // ── Derived ──────────────────────────────────────────────────────────────
   const wordCount = useMemo(() => {
@@ -267,6 +299,9 @@ export default function CoverLetterGenerator() {
     })
 
     toast.success('Cover letter saved!')
+
+    // Record milestone for progress tracking
+    recordMilestone(storeState.dbUserId, 'cover-letter', 'first-cover-letter', 1)
 
     // Save to database for document history
     try {
@@ -672,12 +707,14 @@ export default function CoverLetterGenerator() {
                 Preview & Edit
               </span>
             </div>
-            <Textarea
-              value={editableContent}
-              onChange={(e) => setEditableContent(e.target.value)}
-              className="bg-transparent border-0 focus-visible:ring-0 focus-visible:border-0 resize-none min-h-[400px] text-base leading-relaxed text-foreground/90 placeholder:text-muted-foreground/50 p-0"
-              placeholder="Your cover letter will appear here..."
-            />
+            <div ref={coverLetterPreviewRef} className="bg-white text-gray-900 rounded-lg p-6">
+              <Textarea
+                value={editableContent}
+                onChange={(e) => setEditableContent(e.target.value)}
+                className="bg-transparent border-0 focus-visible:ring-0 focus-visible:border-0 resize-none min-h-[300px] text-sm leading-relaxed text-gray-900 placeholder:text-gray-400 p-0"
+                placeholder="Your cover letter will appear here..."
+              />
+            </div>
           </CardContent>
         </Card>
       </motion.div>
@@ -735,6 +772,16 @@ export default function CoverLetterGenerator() {
             )}
           </Button>
         </div>
+
+        {/* Download PDF */}
+        <Button
+          onClick={handleDownloadPDF}
+          variant="outline"
+          className="w-full border-primary/30 text-primary hover:bg-primary/10 rounded-xl h-11 gap-2 font-semibold"
+        >
+          <Download className="h-4 w-4" />
+          Download PDF
+        </Button>
 
         {/* Secondary Actions */}
         <div className="grid grid-cols-2 gap-3">

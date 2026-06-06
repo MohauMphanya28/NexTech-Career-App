@@ -134,7 +134,12 @@ function ProfileView() {
 }
 
 export default function Home() {
-  const { currentView, dbUserId, setDbUserId, user, setUser, isAuthenticated, setIsAuthenticated } = useAppStore()
+  const {
+    currentView, dbUserId, setDbUserId, user, setUser, isAuthenticated, setIsAuthenticated,
+    setResumes, setInterviewHistory, setSavedDocuments, setCareerContext,
+    setCoverLetterContent, setCoverLetterJobTitle, setCoverLetterCompany,
+    setCoverLetterJobDesc, setCoverLetterTone,
+  } = useAppStore()
 
   // Use a ref to ensure auth check only runs once on mount
   const authCheckDone = useRef(false)
@@ -153,10 +158,13 @@ export default function Home() {
         if (userId) {
           setDbUserId(userId)
           setIsAuthenticated(true)
-          // Restore user profile
-          fetch(`/api/user?id=${userId}`)
-            .then(r => r.json())
-            .then(userData => {
+          // Restore user profile AND session data in parallel
+          Promise.all([
+            fetch(`/api/user?id=${userId}`).then(r => r.json()),
+            fetch(`/api/career-documents?userId=${userId}`).then(r => r.json()),
+          ])
+            .then(([userData, docsData]) => {
+              // Restore user profile
               if (userData.success && userData.user) {
                 setUser({
                   id: userData.user.id,
@@ -173,6 +181,38 @@ export default function Home() {
                   onboardingDone: userData.user.onboardingDone || false,
                   onboardingStep: userData.user.onboardingStep || 0,
                 })
+              }
+
+              // Restore session data from DB (resumes, interviews, cover letters, career context)
+              if (docsData.success && docsData.sessionData) {
+                const s = docsData.sessionData
+                // Restore resumes
+                if (s.resumes && s.resumes.length > 0) {
+                  setResumes(s.resumes)
+                }
+                // Restore interview history
+                if (s.interviewHistory && s.interviewHistory.length > 0) {
+                  setInterviewHistory(s.interviewHistory)
+                }
+                // Restore saved documents list
+                if (docsData.documents) {
+                  setSavedDocuments(docsData.documents)
+                }
+                // Restore career context (only if store is empty)
+                const storeState = useAppStore.getState()
+                if (!storeState.careerContext.resumeCompleted && s.careerContext) {
+                  setCareerContext(s.careerContext)
+                }
+                // Restore latest cover letter
+                if (s.latestCoverLetter && !storeState.coverLetterContent) {
+                  setCoverLetterContent(s.latestCoverLetter.content || '')
+                  setCoverLetterJobTitle(s.latestCoverLetter.jobTitle || '')
+                  setCoverLetterCompany(s.latestCoverLetter.company || '')
+                  setCoverLetterJobDesc(s.latestCoverLetter.jobDesc || '')
+                  setCoverLetterTone(s.latestCoverLetter.tone || 'formal')
+                }
+              } else if (docsData.success && docsData.documents) {
+                setSavedDocuments(docsData.documents)
               }
             })
             .catch(() => {

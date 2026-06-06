@@ -136,7 +136,7 @@ const journeySteps = [
 ] as const
 
 export default function Dashboard() {
-  const { user, setCurrentView, resumes, interviewHistory, careerContext } = useAppStore()
+  const { user, setCurrentView, resumes, interviewHistory, savedDocuments, careerContext } = useAppStore()
 
   // Pick a rotating tip based on the day
   const tipIndex = new Date().getDate() % careerTips.length
@@ -145,14 +145,20 @@ export default function Dashboard() {
   // Time-of-day greeting
   const greeting = getGreeting()
 
-  // Compute stats
-  const resumeCount = resumes.length
-  const letterCount = 0
-  const interviewCount = interviewHistory.length
+  // Compute stats from DB-backed data (savedDocuments) when available, fallback to store
+  const resumeCount = savedDocuments.length > 0
+    ? savedDocuments.filter((d: any) => d.type === 'resume').length
+    : resumes.length
+  const letterCount = savedDocuments.length > 0
+    ? savedDocuments.filter((d: any) => d.type === 'cover-letter').length
+    : 0
+  const interviewCount = savedDocuments.length > 0
+    ? savedDocuments.filter((d: any) => d.type === 'interview').length
+    : interviewHistory.length
   const avgScore =
     interviewCount > 0
       ? Math.round(
-          interviewHistory.reduce((sum, s) => sum + s.score, 0) / interviewCount
+          interviewHistory.reduce((sum, s) => sum + s.score, 0) / interviewHistory.length
         )
       : 0
 

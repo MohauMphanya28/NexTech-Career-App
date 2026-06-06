@@ -11,6 +11,7 @@ import {
   FileText,
   Save,
   RotateCcw,
+  Download,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -18,7 +19,7 @@ import { Textarea } from '@/components/ui/textarea'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Progress } from '@/components/ui/progress'
 import { Badge } from '@/components/ui/badge'
-import { useAppStore } from '@/lib/store'
+import { useAppStore, recordMilestone } from '@/lib/store'
 import { toast } from 'sonner'
 
 // ─── Types ───────────────────────────────────────────────────────────────────
@@ -266,6 +267,36 @@ export default function ResumeBuilder() {
   const [suggestions, setSuggestions] = useState<string[]>([])
 
   const summaryRef = useRef<HTMLTextAreaElement>(null)
+  const resumePreviewRef = useRef<HTMLDivElement>(null)
+
+  // ── PDF Export ────────────────────────────────────────────────────────────
+
+  const handleDownloadPDF = useCallback(async () => {
+    const element = resumePreviewRef.current
+    if (!element) {
+      toast.error('No resume preview available to download.')
+      return
+    }
+
+    try {
+      const html2pdf = (await import('html2pdf.js')).default
+      const name = personalInfo.fullName || 'My'
+      html2pdf()
+        .set({
+          margin: [10, 10, 10, 10],
+          filename: `${name}_Resume.pdf`,
+          image: { type: 'jpeg', quality: 0.98 },
+          html2canvas: { scale: 2, useCORS: true },
+          jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' },
+        })
+        .from(element)
+        .save()
+      toast.success('PDF downloaded!')
+    } catch {
+      // Fallback: open print dialog
+      window.print()
+    }
+  }, [personalInfo.fullName])
 
   // ── Step Navigation ─────────────────────────────────────────────────────
 
@@ -610,22 +641,30 @@ export default function ResumeBuilder() {
         console.error('Failed to save resume to DB:', saveErr)
       }
 
-      // Update user data on the backend
+      // Update user data on the backend (use PUT if user exists)
       try {
-        await fetch('/api/user', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            name: personalInfo.fullName,
-            email: personalInfo.email,
-            phone: personalInfo.phone,
-            location: personalInfo.location,
-            skills: resumeData.skills,
-          }),
-        })
+        const storeState = useAppStore.getState()
+        const existingUserId = storeState.dbUserId
+        if (existingUserId) {
+          await fetch('/api/user', {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              id: existingUserId,
+              name: personalInfo.fullName,
+              email: personalInfo.email,
+              phone: personalInfo.phone,
+              location: personalInfo.location,
+              skills: resumeData.skills,
+            }),
+          })
+        }
       } catch {
         // Non-critical, resume is already saved to store
       }
+
+      // Record milestone for progress tracking
+      recordMilestone(storeState.dbUserId, 'resume', 'first-resume', 1)
 
       // Seamless flow: redirect to cover letter generator
       setPendingCoverLetterGenerate(true)
@@ -1418,13 +1457,13 @@ export default function ResumeBuilder() {
           <CardTitle className="text-lg gradient-text">Resume Preview</CardTitle>
         </CardHeader>
         <CardContent className="p-4 pt-0">
-          <div className="bg-background/50 rounded-lg p-4 space-y-4 text-sm max-h-96 overflow-y-auto">
+          <div ref={resumePreviewRef} className="bg-white text-gray-900 rounded-lg p-6 space-y-4 text-sm max-h-96 overflow-y-auto">
             {/* Header */}
-            <div className="text-center border-b border-border pb-3">
-              <h3 className="text-xl font-bold text-foreground">
+            <div className="text-center border-b border-gray-300 pb-3">
+              <h3 className="text-xl font-bold text-gray-900">
                 {generatedResume?.personalInfo?.fullName || personalInfo.fullName || 'Your Name'}
               </h3>
-              <div className="flex flex-wrap items-center justify-center gap-x-3 gap-y-1 mt-1 text-muted-foreground text-xs">
+              <div className="flex flex-wrap items-center justify-center gap-x-3 gap-y-1 mt-1 text-gray-600 text-xs">
                 {((generatedResume?.personalInfo?.email || personalInfo.email)) && (
                   <span>{generatedResume?.personalInfo?.email || personalInfo.email}</span>
                 )}
@@ -1592,6 +1631,16 @@ export default function ResumeBuilder() {
             Generate with AI
           </>
         )}
+      </Button>
+
+      {/* Download PDF Button */}
+      <Button
+        onClick={handleDownloadPDF}
+        variant="outline"
+        className="w-full border-primary/30 text-primary hover:bg-primary/10 rounded-xl h-12 text-base font-semibold"
+      >
+        <Download className="h-5 w-5 mr-2" />
+        Download PDF
       </Button>
 
       {/* Save Button */}

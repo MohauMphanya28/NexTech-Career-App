@@ -26,7 +26,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Card } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
-import { useAppStore } from '@/lib/store'
+import { useAppStore, recordMilestone } from '@/lib/store'
 import { toast } from 'sonner'
 
 // ─── Types ───────────────────────────────────────────────────────────────────

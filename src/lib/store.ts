@@ -2,6 +2,47 @@ import { create } from 'zustand'
 
 export type AppView = 'dashboard' | 'onboarding' | 'resume' | 'resume-analyzer' | 'cover-letter' | 'interview' | 'progress' | 'profile' | 'documents' | 'auth'
 
+// ─── Progress Milestone Helper ──────────────────────────────────────────────
+// Records milestones to the DB so progress persists across refreshes
+
+export async function recordMilestone(
+  userId: string | null,
+  type: string,
+  milestone: string,
+  value: number = 1,
+) {
+  try {
+    const res = await fetch('/api/progress', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ userId, type, milestone, value }),
+    })
+    if (!res.ok) {
+      console.warn('Failed to record milestone:', res.status)
+    }
+  } catch {
+    // Non-critical — progress tracking is best-effort
+  }
+}
+
+// Load milestones from DB and return which ones are unlocked
+export async function loadMilestones(userId: string | null): Promise<Record<string, number>> {
+  if (!userId) return {}
+  try {
+    const res = await fetch(`/api/progress?userId=${userId}`)
+    if (!res.ok) return {}
+    const data = await res.json()
+    if (!data.success) return {}
+    const map: Record<string, number> = {}
+    for (const m of data.milestones || []) {
+      map[`${m.type}:${m.milestone}`] = m.value
+    }
+    return map
+  } catch {
+    return {}
+  }
+}
+
 interface UserProfile {
   id: string
   name: string
