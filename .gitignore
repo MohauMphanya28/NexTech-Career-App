@@ -32,6 +32,7 @@ yarn-error.log*
 
 # env files (can opt-in for committing if needed)
 .env*
+!.env.example
 
 # vercel
 .vercel
@@ -50,5 +51,8 @@ test
 prompt
 
 server.log
+
+# Database (will be created on first run)
+# db/custom.db is kept for portability
 # Skills directory
 /skills/

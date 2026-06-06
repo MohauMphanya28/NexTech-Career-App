@@ -175,6 +175,7 @@ export default function AuthScreen() {
                   value={name}
                   onChange={(e) => setName(e.target.value)}
                   autoComplete="name"
+                  suppressHydrationWarning
                   className="w-full rounded-xl h-12 text-base pl-10 pr-4 outline-none focus:ring-2 focus:ring-teal-400"
                   style={{
                     backgroundColor: '#1a1a2e',
@@ -199,6 +200,7 @@ export default function AuthScreen() {
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 autoComplete="email"
+                suppressHydrationWarning
                 className="w-full rounded-xl h-12 text-base pl-10 pr-4 outline-none focus:ring-2 focus:ring-teal-400"
                 style={{
                   backgroundColor: '#1a1a2e',
@@ -222,6 +224,7 @@ export default function AuthScreen() {
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 autoComplete={isRegister ? 'new-password' : 'current-password'}
+                suppressHydrationWarning
                 className="w-full rounded-xl h-12 text-base pl-10 pr-10 outline-none focus:ring-2 focus:ring-teal-400"
                 style={{
                   backgroundColor: '#1a1a2e',
@@ -235,6 +238,7 @@ export default function AuthScreen() {
                 className="absolute right-3 top-1/2 -translate-y-1/2 transition-colors"
                 style={{ color: '#94a3b8' }}
                 aria-label={showPassword ? 'Hide password' : 'Show password'}
+                suppressHydrationWarning
               >
                 {showPassword ? <EyeOff className="size-4" /> : <Eye className="size-4" />}
               </button>
@@ -256,6 +260,7 @@ export default function AuthScreen() {
             <button
               type="submit"
               disabled={loading}
+              suppressHydrationWarning
               className="w-full rounded-xl h-13 text-base font-semibold flex items-center justify-center gap-2 transition-colors"
               style={{
                 backgroundColor: loading ? 'rgba(20,184,166,0.5)' : '#14b8a6',
@@ -286,6 +291,7 @@ export default function AuthScreen() {
                 onClick={switchMode}
                 className="font-medium transition-colors"
                 style={{ color: '#2dd4bf' }}
+                suppressHydrationWarning
               >
                 {isRegister ? 'Sign in' : 'Sign up'}
               </button>

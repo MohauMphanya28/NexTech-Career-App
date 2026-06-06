@@ -1,5 +1,6 @@
 'use client'
 
+import { useState, useEffect } from 'react'
 import Image from 'next/image'
 import { motion } from 'framer-motion'
 import {
@@ -118,6 +119,10 @@ const itemVariants = {
 
 // Time-of-day greeting helper
 function getGreeting(): { text: string; icon: React.ReactNode } {
+  // Only compute on client to avoid hydration mismatch
+  if (typeof window === 'undefined') {
+    return { text: 'Welcome', icon: <Sparkles className="size-5 text-teal-400" /> }
+  }
   const hour = new Date().getHours()
   if (hour >= 5 && hour < 12) {
     return { text: 'Good morning', icon: <Sun className="size-5 text-amber-400" /> }
@@ -138,8 +143,11 @@ const journeySteps = [
 export default function Dashboard() {
   const { user, setCurrentView, resumes, interviewHistory, savedDocuments, careerContext } = useAppStore()
 
-  // Pick a rotating tip based on the day
-  const tipIndex = new Date().getDate() % careerTips.length
+  // Pick a rotating tip based on the day (client-only to avoid hydration mismatch)
+  const [tipIndex, setTipIndex] = useState(() => {
+    if (typeof window === 'undefined') return 0
+    return new Date().getDate() % careerTips.length
+  })
   const todayTip = careerTips[tipIndex]
 
   // Time-of-day greeting

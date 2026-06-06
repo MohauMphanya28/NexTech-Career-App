@@ -300,12 +300,12 @@ export default function CoverLetterGenerator() {
 
     toast.success('Cover letter saved!')
 
-    // Record milestone for progress tracking
-    recordMilestone(storeState.dbUserId, 'cover-letter', 'first-cover-letter', 1)
-
     // Save to database for document history
     try {
       const storeState = useAppStore.getState()
+
+      // Record milestone for progress tracking
+      recordMilestone(storeState.dbUserId, 'cover-letter', 'first-cover-letter', 1)
       // Resolve the real DB user ID — prefer dbUserId, then fetch from API
       let userId = storeState.dbUserId
       if (!userId) {

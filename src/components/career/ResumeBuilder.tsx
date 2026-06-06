@@ -214,7 +214,12 @@ const INDUSTRY_SKILLS: Record<string, string[]> = {
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
 function uid(): string {
-  return Math.random().toString(36).substring(2, 11)
+  // Use crypto.randomUUID for SSR-safe IDs (no Math.random hydration mismatch)
+  if (typeof crypto !== 'undefined' && crypto.randomUUID) {
+    return crypto.randomUUID()
+  }
+  // Fallback for environments without crypto.randomUUID
+  return Date.now().toString(36) + Math.random().toString(36).substring(2)
 }
 
 // ─── Component ───────────────────────────────────────────────────────────────
