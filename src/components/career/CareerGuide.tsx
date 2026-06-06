@@ -1,9 +1,10 @@
 'use client'
 
-import { useState, useEffect, useMemo } from 'react'
+import { useState, useEffect, useMemo, useRef, useCallback } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { MessageCircle, X, ChevronRight, Sparkles, CheckCircle2, ArrowRight, FolderOpen, FileText, Mail, Mic } from 'lucide-react'
+import { MessageCircle, X, ChevronRight, Sparkles, CheckCircle2, ArrowRight, FolderOpen, FileText, Mail, Mic, Bot, Send, Loader2, Lightbulb, MessagesSquare } from 'lucide-react'
 import { useAppStore, type AppView } from '@/lib/store'
+import { toast } from 'sonner'
 
 interface GuideMessage {
   id: string
@@ -17,10 +18,27 @@ interface GuideMessage {
   }
 }
 
+interface ChatMessage {
+  id: string
+  role: 'user' | 'ai'
+  content: string
+  timestamp: number
+}
+
+type GuideTab = 'tips' | 'chat'
+
 export default function CareerGuide() {
-  const { careerContext, currentView, setCurrentView, savedDocuments } = useAppStore()
+  const { careerContext, currentView, setCurrentView, savedDocuments, user } = useAppStore()
   const [isOpen, setIsOpen] = useState(false)
+  const [activeTab, setActiveTab] = useState<GuideTab>('tips')
   const [dismissedMessages, setDismissedMessages] = useState<Set<string>>(new Set())
+
+  // Chat state
+  const [chatMessages, setChatMessages] = useState<ChatMessage[]>([])
+  const [chatInput, setChatInput] = useState('')
+  const [isChatLoading, setIsChatLoading] = useState(false)
+  const chatEndRef = useRef<HTMLDivElement>(null)
+  const chatInputRef = useRef<HTMLInputElement>(null)
 
   // Determine contextual messages based on career progress
   const messages = useMemo<GuideMessage[]>(() => {
@@ -207,10 +225,108 @@ export default function CareerGuide() {
     setCurrentView(view)
   }
 
+  // Auto-scroll chat to bottom
+  useEffect(() => {
+    if (activeTab === 'chat') {
+      chatEndRef.current?.scrollIntoView({ behavior: 'smooth' })
+    }
+  }, [chatMessages, activeTab])
+
+  // Focus input when switching to chat tab
+  useEffect(() => {
+    if (activeTab === 'chat' && isOpen) {
+      setTimeout(() => chatInputRef.current?.focus(), 100)
+    }
+  }, [activeTab, isOpen])
+
+  // Build career context string for the AI
+  const buildCareerContextString = useCallback(() => {
+    const parts: string[] = []
+    if (user?.name) parts.push(`Name: ${user.name}`)
+    if (user?.field) parts.push(`Field: ${user.field}`)
+    if (user?.experience) parts.push(`Experience level: ${user.experience}`)
+    if (user?.careerGoal) parts.push(`Career goal: ${user.careerGoal}`)
+    if (user?.skills?.length) parts.push(`Skills: ${user.skills.join(', ')}`)
+    if (careerContext.resumeJobTitle) parts.push(`Target role: ${careerContext.resumeJobTitle}`)
+    if (careerContext.resumeCompany) parts.push(`Target company: ${careerContext.resumeCompany}`)
+    if (careerContext.resumeCompleted) parts.push('Has completed a resume')
+    if (careerContext.coverLetterCompleted) parts.push('Has completed a cover letter')
+    if (careerContext.interviewCompleted) parts.push(`Has practiced interviews (last score: ${careerContext.lastInterviewScore}/10)`)
+    return parts.length > 0 ? parts.join('. ') : undefined
+  }, [user, careerContext])
+
+  const handleSendChat = useCallback(async () => {
+    const trimmed = chatInput.trim()
+    if (!trimmed || isChatLoading) return
+
+    const userMsg: ChatMessage = {
+      id: `user-${Date.now()}`,
+      role: 'user',
+      content: trimmed,
+      timestamp: Date.now(),
+    }
+
+    setChatMessages(prev => [...prev, userMsg])
+    setChatInput('')
+    setIsChatLoading(true)
+
+    try {
+      const contextStr = buildCareerContextString()
+      const chatContext = chatMessages.slice(-6).map(m => ({
+        role: m.role === 'ai' ? 'ai' : 'user',
+        content: m.content,
+      }))
+
+      const res = await fetch('/api/ai/chat', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          message: trimmed,
+          type: 'general',
+          context: [
+            ...(contextStr ? [{ role: 'user', content: `User context: ${contextStr}` }] : []),
+            ...chatContext,
+          ],
+        }),
+      })
+
+      if (!res.ok) {
+        throw new Error(`API returned ${res.status}`)
+      }
+
+      const data = await res.json()
+
+      if (!data.success || !data.response) {
+        throw new Error(data.error || 'No response from AI')
+      }
+
+      const aiMsg: ChatMessage = {
+        id: `ai-${Date.now()}`,
+        role: 'ai',
+        content: data.response,
+        timestamp: Date.now(),
+      }
+
+      setChatMessages(prev => [...prev, aiMsg])
+    } catch (error: any) {
+      console.error('Chat error:', error)
+      toast.error('Failed to get a response. Please try again.')
+    } finally {
+      setIsChatLoading(false)
+    }
+  }, [chatInput, isChatLoading, chatMessages, buildCareerContextString])
+
+  const handleChatKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault()
+      handleSendChat()
+    }
+  }
+
   const visibleMessages = messages.filter(m => !dismissedMessages.has(m.id))
 
-  // Don't show the guide during onboarding or when there are no messages
-  if (currentView === 'onboarding' || messages.length === 0) return null
+  // Don't show the guide during onboarding
+  if (currentView === 'onboarding') return null
 
   return (
     <>
@@ -260,10 +376,10 @@ export default function CareerGuide() {
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, y: 20, scale: 0.95 }}
             transition={{ duration: 0.25, ease: [0.25, 0.46, 0.45, 0.94] }}
-            className="fixed bottom-40 right-4 z-50 w-[calc(100vw-2rem)] sm:w-80 max-h-[60vh] overflow-y-auto rounded-2xl border border-border/50 bg-background/95 backdrop-blur-xl shadow-2xl"
+            className="fixed bottom-40 right-4 z-50 w-[calc(100vw-2rem)] sm:w-96 max-h-[70vh] rounded-2xl border border-border/50 bg-background/95 backdrop-blur-xl shadow-2xl flex flex-col overflow-hidden"
           >
             {/* Header */}
-            <div className="flex items-center gap-2.5 p-4 border-b border-border/40">
+            <div className="flex items-center gap-2.5 p-4 border-b border-border/40 shrink-0">
               <div className="size-8 rounded-full bg-teal-500/20 flex items-center justify-center">
                 <Sparkles className="size-4 text-teal-400" />
               </div>
@@ -273,84 +389,244 @@ export default function CareerGuide() {
               </div>
             </div>
 
-            {/* Messages */}
-            <div className="p-3 space-y-2">
-              {visibleMessages.length === 0 ? (
-                <div className="text-center py-6 text-sm text-muted-foreground">
-                  <CheckCircle2 className="size-8 mx-auto mb-2 text-teal-400" />
-                  <p>You&apos;re all caught up!</p>
-                  <p className="text-xs mt-1">Keep going with your career prep.</p>
-                </div>
-              ) : (
-                visibleMessages.map((msg, i) => (
+            {/* Tab Switcher */}
+            <div className="flex shrink-0 border-b border-border/40">
+              <button
+                onClick={() => setActiveTab('tips')}
+                className={`flex-1 flex items-center justify-center gap-1.5 py-2.5 text-xs font-medium transition-colors relative ${
+                  activeTab === 'tips'
+                    ? 'text-teal-400'
+                    : 'text-muted-foreground hover:text-foreground'
+                }`}
+              >
+                <Lightbulb className="size-3.5" />
+                Tips
+                {activeTab === 'tips' && (
                   <motion.div
-                    key={msg.id}
-                    initial={{ opacity: 0, y: 10 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    transition={{ delay: i * 0.1, duration: 0.3 }}
-                    className={`
-                      rounded-xl p-3 border
-                      ${msg.type === 'next-step' ? 'bg-teal-500/10 border-teal-500/20' : ''}
-                      ${msg.type === 'tip' ? 'bg-amber-500/10 border-amber-500/20' : ''}
-                      ${msg.type === 'success' ? 'bg-emerald-500/10 border-emerald-500/20' : ''}
-                      ${msg.type === 'motivation' ? 'bg-purple-500/10 border-purple-500/20' : ''}
-                    `}
-                  >
-                    <div className="flex items-start gap-2">
-                      <div className={`
-                        mt-0.5 shrink-0
-                        ${msg.type === 'next-step' ? 'text-teal-400' : ''}
-                        ${msg.type === 'tip' ? 'text-amber-400' : ''}
-                        ${msg.type === 'success' ? 'text-emerald-400' : ''}
-                        ${msg.type === 'motivation' ? 'text-purple-400' : ''}
-                      `}>
-                        {msg.icon}
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <p className="text-sm font-medium text-foreground">{msg.title}</p>
-                        <p className="text-xs text-muted-foreground mt-0.5 leading-relaxed">{msg.description}</p>
-                        {msg.action && (
-                          <button
-                            onClick={() => handleAction(msg.action!.view)}
-                            className="mt-2 inline-flex items-center gap-1 text-xs font-medium text-teal-400 hover:text-teal-300 transition-colors"
-                          >
-                            {msg.action.label}
-                            <ChevronRight className="size-3" />
-                          </button>
-                        )}
-                      </div>
-                      <button
-                        onClick={() => handleDismiss(msg.id)}
-                        className="shrink-0 text-muted-foreground/50 hover:text-muted-foreground transition-colors"
-                        aria-label="Dismiss"
-                      >
-                        <X className="size-3" />
-                      </button>
-                    </div>
-                  </motion.div>
-                ))
-              )}
+                    layoutId="guide-tab-indicator"
+                    className="absolute bottom-0 left-2 right-2 h-0.5 bg-teal-400 rounded-full"
+                    transition={{ duration: 0.2 }}
+                  />
+                )}
+              </button>
+              <button
+                onClick={() => setActiveTab('chat')}
+                className={`flex-1 flex items-center justify-center gap-1.5 py-2.5 text-xs font-medium transition-colors relative ${
+                  activeTab === 'chat'
+                    ? 'text-teal-400'
+                    : 'text-muted-foreground hover:text-foreground'
+                }`}
+              >
+                <MessagesSquare className="size-3.5" />
+                Ask AI
+                {activeTab === 'chat' && (
+                  <motion.div
+                    layoutId="guide-tab-indicator"
+                    className="absolute bottom-0 left-2 right-2 h-0.5 bg-teal-400 rounded-full"
+                    transition={{ duration: 0.2 }}
+                  />
+                )}
+              </button>
             </div>
 
-            {/* Progress indicator */}
-            <div className="px-4 pb-3">
-              <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                <div className="flex gap-1">
-                  <div className={`size-2 rounded-full ${careerContext.resumeCompleted ? 'bg-teal-400' : 'bg-secondary'}`} />
-                  <div className={`size-2 rounded-full ${careerContext.coverLetterCompleted ? 'bg-teal-400' : 'bg-secondary'}`} />
-                  <div className={`size-2 rounded-full ${careerContext.interviewCompleted ? 'bg-teal-400' : 'bg-secondary'}`} />
-                </div>
-                <span>
-                  {careerContext.interviewCompleted
-                    ? 'All steps complete!'
-                    : careerContext.coverLetterCompleted
-                      ? '2 of 3 done'
-                      : careerContext.resumeCompleted
-                        ? '1 of 3 done'
-                        : 'Get started'}
-                </span>
-              </div>
-            </div>
+            {/* Tab Content */}
+            <AnimatePresence mode="wait">
+              {activeTab === 'tips' ? (
+                <motion.div
+                  key="tips"
+                  initial={{ opacity: 0, x: -10 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  exit={{ opacity: 0, x: -10 }}
+                  transition={{ duration: 0.15 }}
+                  className="flex flex-col overflow-hidden"
+                >
+                  {/* Tips Messages */}
+                  <div className="p-3 space-y-2 overflow-y-auto max-h-[40vh]">
+                    {visibleMessages.length === 0 ? (
+                      <div className="text-center py-6 text-sm text-muted-foreground">
+                        <CheckCircle2 className="size-8 mx-auto mb-2 text-teal-400" />
+                        <p>You&apos;re all caught up!</p>
+                        <p className="text-xs mt-1">Keep going with your career prep.</p>
+                      </div>
+                    ) : (
+                      visibleMessages.map((msg, i) => (
+                        <motion.div
+                          key={msg.id}
+                          initial={{ opacity: 0, y: 10 }}
+                          animate={{ opacity: 1, y: 0 }}
+                          transition={{ delay: i * 0.1, duration: 0.3 }}
+                          className={`
+                            rounded-xl p-3 border
+                            ${msg.type === 'next-step' ? 'bg-teal-500/10 border-teal-500/20' : ''}
+                            ${msg.type === 'tip' ? 'bg-amber-500/10 border-amber-500/20' : ''}
+                            ${msg.type === 'success' ? 'bg-emerald-500/10 border-emerald-500/20' : ''}
+                            ${msg.type === 'motivation' ? 'bg-purple-500/10 border-purple-500/20' : ''}
+                          `}
+                        >
+                          <div className="flex items-start gap-2">
+                            <div className={`
+                              mt-0.5 shrink-0
+                              ${msg.type === 'next-step' ? 'text-teal-400' : ''}
+                              ${msg.type === 'tip' ? 'text-amber-400' : ''}
+                              ${msg.type === 'success' ? 'text-emerald-400' : ''}
+                              ${msg.type === 'motivation' ? 'text-purple-400' : ''}
+                            `}>
+                              {msg.icon}
+                            </div>
+                            <div className="flex-1 min-w-0">
+                              <p className="text-sm font-medium text-foreground">{msg.title}</p>
+                              <p className="text-xs text-muted-foreground mt-0.5 leading-relaxed">{msg.description}</p>
+                              {msg.action && (
+                                <button
+                                  onClick={() => handleAction(msg.action!.view)}
+                                  className="mt-2 inline-flex items-center gap-1 text-xs font-medium text-teal-400 hover:text-teal-300 transition-colors"
+                                >
+                                  {msg.action.label}
+                                  <ChevronRight className="size-3" />
+                                </button>
+                              )}
+                            </div>
+                            <button
+                              onClick={() => handleDismiss(msg.id)}
+                              className="shrink-0 text-muted-foreground/50 hover:text-muted-foreground transition-colors"
+                              aria-label="Dismiss"
+                            >
+                              <X className="size-3" />
+                            </button>
+                          </div>
+                        </motion.div>
+                      ))
+                    )}
+                  </div>
+
+                  {/* Progress indicator */}
+                  <div className="px-4 pb-3 shrink-0">
+                    <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                      <div className="flex gap-1">
+                        <div className={`size-2 rounded-full ${careerContext.resumeCompleted ? 'bg-teal-400' : 'bg-secondary'}`} />
+                        <div className={`size-2 rounded-full ${careerContext.coverLetterCompleted ? 'bg-teal-400' : 'bg-secondary'}`} />
+                        <div className={`size-2 rounded-full ${careerContext.interviewCompleted ? 'bg-teal-400' : 'bg-secondary'}`} />
+                      </div>
+                      <span>
+                        {careerContext.interviewCompleted
+                          ? 'All steps complete!'
+                          : careerContext.coverLetterCompleted
+                            ? '2 of 3 done'
+                            : careerContext.resumeCompleted
+                              ? '1 of 3 done'
+                              : 'Get started'}
+                      </span>
+                    </div>
+                  </div>
+                </motion.div>
+              ) : (
+                <motion.div
+                  key="chat"
+                  initial={{ opacity: 0, x: 10 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  exit={{ opacity: 0, x: 10 }}
+                  transition={{ duration: 0.15 }}
+                  className="flex flex-col overflow-hidden flex-1"
+                >
+                  {/* Chat Messages */}
+                  <div className="flex-1 p-3 space-y-3 overflow-y-auto max-h-[40vh] min-h-[120px]">
+                    {chatMessages.length === 0 && (
+                      <div className="text-center py-8 text-sm text-muted-foreground">
+                        <Bot className="size-10 mx-auto mb-3 text-teal-400/60" />
+                        <p className="font-medium text-foreground/80">Ask me anything about your career</p>
+                        <p className="text-xs mt-1.5 leading-relaxed max-w-[240px] mx-auto">
+                          Get personalised advice on resumes, interviews, job searching, and more.
+                        </p>
+                      </div>
+                    )}
+                    {chatMessages.map((msg) => (
+                      <motion.div
+                        key={msg.id}
+                        initial={{ opacity: 0, y: 8 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        transition={{ duration: 0.2 }}
+                        className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}
+                      >
+                        <div
+                          className={`
+                            max-w-[85%] rounded-2xl px-3.5 py-2.5 text-sm leading-relaxed
+                            ${msg.role === 'user'
+                              ? 'bg-teal-500 text-white rounded-br-md'
+                              : 'bg-secondary/80 text-foreground rounded-bl-md border border-border/30'
+                            }
+                          `}
+                        >
+                          {msg.role === 'ai' && (
+                            <div className="flex items-center gap-1.5 mb-1">
+                              <Bot className="size-3 text-teal-400" />
+                              <span className="text-[10px] font-medium text-teal-400">NexTech</span>
+                            </div>
+                          )}
+                          <p className="whitespace-pre-wrap break-words">{msg.content}</p>
+                        </div>
+                      </motion.div>
+                    ))}
+
+                    {/* Typing indicator */}
+                    {isChatLoading && (
+                      <motion.div
+                        initial={{ opacity: 0, y: 8 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        className="flex justify-start"
+                      >
+                        <div className="bg-secondary/80 rounded-2xl rounded-bl-md px-4 py-3 border border-border/30 flex items-center gap-1.5">
+                          <Bot className="size-3 text-teal-400 mr-1" />
+                          <motion.div
+                            className="size-1.5 rounded-full bg-teal-400"
+                            animate={{ opacity: [0.3, 1, 0.3] }}
+                            transition={{ duration: 1.2, repeat: Infinity, delay: 0 }}
+                          />
+                          <motion.div
+                            className="size-1.5 rounded-full bg-teal-400"
+                            animate={{ opacity: [0.3, 1, 0.3] }}
+                            transition={{ duration: 1.2, repeat: Infinity, delay: 0.2 }}
+                          />
+                          <motion.div
+                            className="size-1.5 rounded-full bg-teal-400"
+                            animate={{ opacity: [0.3, 1, 0.3] }}
+                            transition={{ duration: 1.2, repeat: Infinity, delay: 0.4 }}
+                          />
+                        </div>
+                      </motion.div>
+                    )}
+                    <div ref={chatEndRef} />
+                  </div>
+
+                  {/* Chat Input */}
+                  <div className="shrink-0 p-3 border-t border-border/40">
+                    <div className="flex items-center gap-2">
+                      <input
+                        ref={chatInputRef}
+                        type="text"
+                        value={chatInput}
+                        onChange={(e) => setChatInput(e.target.value)}
+                        onKeyDown={handleChatKeyDown}
+                        placeholder="Ask a career question..."
+                        disabled={isChatLoading}
+                        className="flex-1 rounded-xl bg-secondary/60 border border-border/40 px-3.5 py-2.5 text-sm text-foreground placeholder:text-muted-foreground/60 focus:outline-none focus:ring-1 focus:ring-teal-500/50 focus:border-teal-500/50 disabled:opacity-50 transition-colors"
+                      />
+                      <button
+                        onClick={handleSendChat}
+                        disabled={!chatInput.trim() || isChatLoading}
+                        className="size-9 rounded-xl bg-teal-500 text-white flex items-center justify-center hover:bg-teal-400 transition-colors disabled:opacity-40 disabled:hover:bg-teal-500 shrink-0"
+                        aria-label="Send message"
+                      >
+                        {isChatLoading ? (
+                          <Loader2 className="size-4 animate-spin" />
+                        ) : (
+                          <Send className="size-4" />
+                        )}
+                      </button>
+                    </div>
+                  </div>
+                </motion.div>
+              )}
+            </AnimatePresence>
           </motion.div>
         )}
       </AnimatePresence>

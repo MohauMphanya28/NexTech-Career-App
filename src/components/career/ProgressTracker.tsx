@@ -161,25 +161,35 @@ export default function ProgressTracker() {
     coverLetterContent,
     coverLetterJobTitle,
     interviewHistory,
+    savedDocuments,
+    careerContext,
     setCurrentView,
   } = useAppStore()
 
   // ─── Computed Stats ───
   const stats = useMemo(() => {
-    const resumeCount = resumes.length
+    // Use DB-backed savedDocuments for accurate counts (persists across refreshes)
+    const dbResumeCount = savedDocuments.filter((d: any) => d.type === 'resume').length
+    const dbLetterCount = savedDocuments.filter((d: any) => d.type === 'cover-letter').length
+    const dbInterviewCount = savedDocuments.filter((d: any) => d.type === 'interview').length
+
+    // Also consider in-memory store data (current session)
+    const resumeCount = Math.max(dbResumeCount, resumes.length, careerContext.resumeCompleted ? 1 : 0)
     const bestAtsScore =
       resumes.length > 0
         ? Math.max(...resumes.map((r) => r.atsScore || 0))
-        : 0
+        : savedDocuments.filter((d: any) => d.type === 'resume' && d.atsScore > 0)
+            .reduce((max: number, d: any) => Math.max(max, d.atsScore), 0)
 
-    // Cover letter count: if content exists with meaningful length and a job title, count as 1
-    const coverLetterCount =
+    // Cover letter count: use DB count or in-memory state
+    const inMemoryLetterCount =
       coverLetterContent && coverLetterContent.trim().length > 50 && coverLetterJobTitle
         ? 1
         : 0
+    const coverLetterCount = Math.max(dbLetterCount, inMemoryLetterCount, careerContext.coverLetterCompleted ? 1 : 0)
 
     const completedInterviews = interviewHistory.filter((s) => s.completed)
-    const interviewCount = completedInterviews.length
+    const interviewCount = Math.max(dbInterviewCount, completedInterviews.length, careerContext.interviewCompleted ? 1 : 0)
     const avgInterviewScore =
       interviewCount > 0
         ? Math.round(
@@ -282,7 +292,7 @@ export default function ProgressTracker() {
       worstArea,
       latestScore,
     }
-  }, [resumes, coverLetterContent, coverLetterJobTitle, interviewHistory])
+  }, [resumes, coverLetterContent, coverLetterJobTitle, interviewHistory, savedDocuments, careerContext])
 
   // ─── Achievements ───
   const achievements: Achievement[] = useMemo(

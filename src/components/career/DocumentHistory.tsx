@@ -217,26 +217,8 @@ export default function DocumentHistory() {
     }
   }, [savedDocuments, setSavedDocuments, detailView])
 
-  // ── Load Document for Re-use ──────────────────────────────────────────
-
-  const handleReuse = useCallback((doc: DocumentItem) => {
-    if (doc.type === 'resume') {
-      fetchDocumentDetail('resume', doc.id).then(() => {
-        // Will be handled after detail loads
-      })
-    } else if (doc.type === 'cover-letter') {
-      fetchDocumentDetail('cover-letter', doc.id).then(() => {
-        // Will be handled after detail loads
-      })
-    }
-  }, [fetchDocumentDetail])
-
-  // When detailData loads for reuse, load it into the appropriate component
-  useEffect(() => {
-    if (!detailData || !detailView) return
-
-    // Only auto-navigate if user explicitly clicked reuse (we track this with a flag)
-  }, [detailData, detailView])
+  // Note: "Load into Builder" / "Load into Editor" buttons in the detail view
+  // handle document reuse directly — no separate handleReuse needed here.
 
   // ── Filter Documents ──────────────────────────────────────────────────
 

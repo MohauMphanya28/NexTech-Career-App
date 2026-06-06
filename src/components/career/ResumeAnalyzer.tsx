@@ -402,6 +402,7 @@ export default function ResumeAnalyzer() {
           }).catch(() => {})
         } else {
           console.warn('No user ID available — analysis not saved to DB')
+          toast.warning('Analysis results shown but not saved to your documents. Try saving again later.', { duration: 5000 })
         }
       } catch (saveErr) {
         console.error('Failed to save analysis to DB:', saveErr)

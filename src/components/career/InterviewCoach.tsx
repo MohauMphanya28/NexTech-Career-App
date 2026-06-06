@@ -1307,9 +1307,9 @@ export default function InterviewCoach() {
           totalQuestions: questionCount,
           interviewerPersonality: selectedInterviewer.personality,
           interviewerName: selectedInterviewer.name,
-          candidateContext: careerContext.resumeCompleted ? {
-            jobTitle: careerContext.resumeJobTitle,
-            company: careerContext.resumeCompany,
+          candidateContext: (careerContext.resumeCompleted || careerContext.coverLetterCompleted) ? {
+            jobTitle: careerContext.resumeJobTitle || careerContext.coverLetterJobTitle,
+            company: careerContext.resumeCompany || careerContext.coverLetterCompany,
             summary: careerContext.resumeSummary,
             skills: careerContext.resumeSkills,
             experience: careerContext.resumeExperience,
@@ -1426,9 +1426,9 @@ export default function InterviewCoach() {
           interviewerPersonality: selectedInterviewer.personality,
           interviewerName: selectedInterviewer.name,
           conversationHistory,
-          candidateContext: careerContext.resumeCompleted ? {
-            jobTitle: careerContext.resumeJobTitle,
-            company: careerContext.resumeCompany,
+          candidateContext: (careerContext.resumeCompleted || careerContext.coverLetterCompleted) ? {
+            jobTitle: careerContext.resumeJobTitle || careerContext.coverLetterJobTitle,
+            company: careerContext.resumeCompany || careerContext.coverLetterCompany,
             summary: careerContext.resumeSummary,
             skills: careerContext.resumeSkills,
             experience: careerContext.resumeExperience,

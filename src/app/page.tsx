@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useCallback, useRef } from 'react'
+import { useEffect, useCallback, useRef, useState } from 'react'
 import { useAppStore } from '@/lib/store'
 import OnboardingFlow from '@/components/career/OnboardingFlow'
 import Dashboard from '@/components/career/Dashboard'
@@ -13,13 +13,19 @@ import InterviewCoach from '@/components/career/InterviewCoach'
 import ProgressTracker from '@/components/career/ProgressTracker'
 import DocumentHistory from '@/components/career/DocumentHistory'
 import AuthScreen from '@/components/career/AuthScreen'
-import { User, LogOut, Edit3, ChevronRight, Shield } from 'lucide-react'
+import ErrorBoundary from '@/components/career/ErrorBoundary'
+import { User, LogOut, Edit3, ChevronRight, Shield, Save, X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
+import { Input } from '@/components/ui/input'
+import { Textarea } from '@/components/ui/textarea'
 import { toast } from 'sonner'
 
 function ProfileView() {
-  const { user, setCurrentView, setIsAuthenticated, setUser, setDbUserId } = useAppStore()
+  const { user, dbUserId, setCurrentView, setIsAuthenticated, setUser, setDbUserId } = useAppStore()
+  const [isEditing, setIsEditing] = useState(false)
+  const [isSaving, setIsSaving] = useState(false)
+  const [editForm, setEditForm] = useState<Record<string, string>>({})
 
   const handleSignOut = useCallback(() => {
     setIsAuthenticated(false)
@@ -32,6 +38,91 @@ function ProfileView() {
     toast.success('Signed out successfully')
   }, [setIsAuthenticated, setUser, setDbUserId, setCurrentView])
 
+  const startEditing = useCallback(() => {
+    if (!user) return
+    setEditForm({
+      name: user.name || '',
+      phone: user.phone || '',
+      location: user.location || '',
+      education: user.education || '',
+      field: user.field || '',
+      experience: user.experience || '',
+      careerGoal: user.careerGoal || '',
+      skills: Array.isArray(user.skills) ? user.skills.join(', ') : (typeof user.skills === 'string' ? JSON.parse(user.skills).join(', ') : ''),
+    })
+    setIsEditing(true)
+  }, [user])
+
+  const cancelEditing = useCallback(() => {
+    setIsEditing(false)
+    setEditForm({})
+  }, [])
+
+  const handleSave = useCallback(async () => {
+    if (!user || !dbUserId) return
+    setIsSaving(true)
+
+    try {
+      const skillsArray = editForm.skills
+        ? editForm.skills.split(',').map(s => s.trim()).filter(Boolean)
+        : []
+
+      const res = await fetch('/api/user', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          id: dbUserId,
+          name: editForm.name,
+          phone: editForm.phone,
+          location: editForm.location,
+          education: editForm.education,
+          field: editForm.field,
+          experience: editForm.experience,
+          careerGoal: editForm.careerGoal,
+          skills: skillsArray,
+        }),
+      })
+
+      if (!res.ok) {
+        const errData = await res.json().catch(() => null)
+        throw new Error(errData?.error || `Update failed (${res.status})`)
+      }
+
+      const data = await res.json()
+
+      if (data.success && data.user) {
+        setUser({
+          id: data.user.id,
+          name: data.user.name || '',
+          email: data.user.email || '',
+          phone: data.user.phone || '',
+          age: data.user.age,
+          location: data.user.location || '',
+          education: data.user.education || '',
+          field: data.user.field || '',
+          experience: data.user.experience || '',
+          skills: data.user.skills ? JSON.parse(data.user.skills) : [],
+          careerGoal: data.user.careerGoal || '',
+          onboardingDone: data.user.onboardingDone || false,
+          onboardingStep: data.user.onboardingStep || 0,
+        })
+        setIsEditing(false)
+        setEditForm({})
+        toast.success('Profile updated successfully!')
+      } else {
+        throw new Error('Unexpected response from server')
+      }
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Failed to update profile')
+    } finally {
+      setIsSaving(false)
+    }
+  }, [user, dbUserId, editForm, setUser])
+
+  const updateField = useCallback((field: string, value: string) => {
+    setEditForm(prev => ({ ...prev, [field]: value }))
+  }, [])
+
   return (
     <div className="px-4 pt-6 pb-24 space-y-6">
       {/* Header */}
@@ -39,51 +130,177 @@ function ProfileView() {
         <div className="w-20 h-20 rounded-full bg-primary/20 border-2 border-primary mx-auto flex items-center justify-center mb-3">
           <User className="w-10 h-10 text-primary" />
         </div>
-        <h2 className="text-xl font-bold">{user?.name || 'Guest User'}</h2>
+        <h2 className="text-xl font-bold">{isEditing ? (editForm.name || 'Guest User') : (user?.name || 'Guest User')}</h2>
         <p className="text-muted-foreground text-sm mt-1">
           {user?.email || user?.field || 'Set up your profile to get started'}
         </p>
       </div>
 
+      {/* Edit / Save / Cancel Buttons */}
+      {!isEditing ? (
+        <Button
+          className="w-full rounded-xl"
+          onClick={startEditing}
+        >
+          <Edit3 className="w-4 h-4 mr-2" />
+          Edit Profile
+        </Button>
+      ) : (
+        <div className="flex gap-3">
+          <Button
+            className="flex-1 rounded-xl"
+            onClick={handleSave}
+            disabled={isSaving}
+          >
+            <Save className="w-4 h-4 mr-2" />
+            {isSaving ? 'Saving...' : 'Save Changes'}
+          </Button>
+          <Button
+            variant="outline"
+            className="flex-1 rounded-xl"
+            onClick={cancelEditing}
+            disabled={isSaving}
+          >
+            <X className="w-4 h-4 mr-2" />
+            Cancel
+          </Button>
+        </div>
+      )}
+
       {/* Profile Info */}
       <Card className="glass p-4 space-y-3">
         <h3 className="font-semibold text-sm text-muted-foreground uppercase tracking-wider">Profile Details</h3>
-        <div className="space-y-2 text-sm">
-          {user?.location && (
-            <div className="flex justify-between">
-              <span className="text-muted-foreground">Location</span>
-              <span>{user.location}</span>
+        {isEditing ? (
+          <div className="space-y-3">
+            <div className="space-y-1.5">
+              <label className="text-xs font-medium text-muted-foreground">Name</label>
+              <Input
+                value={editForm.name || ''}
+                onChange={e => updateField('name', e.target.value)}
+                placeholder="Your full name"
+                className="rounded-lg"
+              />
             </div>
-          )}
-          {user?.education && (
-            <div className="flex justify-between">
-              <span className="text-muted-foreground">Education</span>
-              <span>{user.education}</span>
+            <div className="space-y-1.5">
+              <label className="text-xs font-medium text-muted-foreground">Phone</label>
+              <Input
+                value={editForm.phone || ''}
+                onChange={e => updateField('phone', e.target.value)}
+                placeholder="e.g. +27 82 123 4567"
+                className="rounded-lg"
+              />
             </div>
-          )}
-          {user?.experience && (
-            <div className="flex justify-between">
-              <span className="text-muted-foreground">Experience</span>
-              <span>{user.experience}</span>
+            <div className="space-y-1.5">
+              <label className="text-xs font-medium text-muted-foreground">Location</label>
+              <Input
+                value={editForm.location || ''}
+                onChange={e => updateField('location', e.target.value)}
+                placeholder="e.g. Johannesburg, Gauteng"
+                className="rounded-lg"
+              />
             </div>
-          )}
-          {user?.careerGoal && (
-            <div className="flex justify-between">
-              <span className="text-muted-foreground">Career Goal</span>
-              <span>{user.careerGoal}</span>
+            <div className="space-y-1.5">
+              <label className="text-xs font-medium text-muted-foreground">Education</label>
+              <Input
+                value={editForm.education || ''}
+                onChange={e => updateField('education', e.target.value)}
+                placeholder="e.g. National Diploma in IT"
+                className="rounded-lg"
+              />
             </div>
-          )}
-          {user?.skills && (
-            <div>
-              <span className="text-muted-foreground">Skills</span>
-              <div className="flex flex-wrap gap-1 mt-1">
-                {(typeof user.skills === 'string' ? JSON.parse(user.skills) : user.skills)?.map((skill: string, i: number) => (
-                  <span key={i} className="px-2 py-0.5 rounded-full bg-primary/10 text-primary text-xs">{skill}</span>
-                ))}
+            <div className="space-y-1.5">
+              <label className="text-xs font-medium text-muted-foreground">Field</label>
+              <Input
+                value={editForm.field || ''}
+                onChange={e => updateField('field', e.target.value)}
+                placeholder="e.g. Software Development"
+                className="rounded-lg"
+              />
+            </div>
+            <div className="space-y-1.5">
+              <label className="text-xs font-medium text-muted-foreground">Experience</label>
+              <Textarea
+                value={editForm.experience || ''}
+                onChange={e => updateField('experience', e.target.value)}
+                placeholder="Describe your work experience"
+                className="rounded-lg min-h-20"
+              />
+            </div>
+            <div className="space-y-1.5">
+              <label className="text-xs font-medium text-muted-foreground">Career Goal</label>
+              <Textarea
+                value={editForm.careerGoal || ''}
+                onChange={e => updateField('careerGoal', e.target.value)}
+                placeholder="What career are you working toward?"
+                className="rounded-lg min-h-20"
+              />
+            </div>
+            <div className="space-y-1.5">
+              <label className="text-xs font-medium text-muted-foreground">Skills (comma-separated)</label>
+              <Textarea
+                value={editForm.skills || ''}
+                onChange={e => updateField('skills', e.target.value)}
+                placeholder="e.g. JavaScript, React, Node.js, Python"
+                className="rounded-lg min-h-16"
+              />
+            </div>
+          </div>
+        ) : (
+          <div className="space-y-2 text-sm">
+            {user?.phone && (
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">Phone</span>
+                <span>{user.phone}</span>
               </div>
-            </div>
-          )}
-        </div>
+            )}
+            {user?.location && (
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">Location</span>
+                <span>{user.location}</span>
+              </div>
+            )}
+            {user?.education && (
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">Education</span>
+                <span>{user.education}</span>
+              </div>
+            )}
+            {user?.field && (
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">Field</span>
+                <span>{user.field}</span>
+              </div>
+            )}
+            {user?.experience && (
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">Experience</span>
+                <span>{user.experience}</span>
+              </div>
+            )}
+            {user?.careerGoal && (
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">Career Goal</span>
+                <span>{user.careerGoal}</span>
+              </div>
+            )}
+            {user?.skills && (Array.isArray(user.skills) ? user.skills : []).length > 0 && (
+              <div>
+                <span className="text-muted-foreground">Skills</span>
+                <div className="flex flex-wrap gap-1 mt-1">
+                  {(typeof user.skills === 'string' ? JSON.parse(user.skills) : user.skills)?.map((skill: string, i: number) => (
+                    <span key={i} className="px-2 py-0.5 rounded-full bg-primary/10 text-primary text-xs">{skill}</span>
+                  ))}
+                </div>
+              </div>
+            )}
+            {/* Show prompt when profile is sparse */}
+            {!user?.location && !user?.education && !user?.experience && !user?.careerGoal && (
+              <p className="text-muted-foreground text-center py-4 text-xs">
+                No profile details yet. Tap &quot;Edit Profile&quot; to add your information.
+              </p>
+            )}
+          </div>
+        )}
       </Card>
 
       {/* Quick Actions */}
@@ -242,14 +459,16 @@ export default function Home() {
   // All other views share the navbar
   return (
     <div className="min-h-screen bg-background pb-20">
-      {currentView === 'dashboard' && <Dashboard />}
-      {currentView === 'resume' && <ResumeBuilder />}
-      {currentView === 'resume-analyzer' && <ResumeAnalyzer />}
-      {currentView === 'cover-letter' && <CoverLetterGenerator />}
-      {currentView === 'interview' && <InterviewCoach />}
-      {currentView === 'progress' && <ProgressTracker />}
-      {currentView === 'documents' && <DocumentHistory />}
-      {currentView === 'profile' && <ProfileView />}
+      <ErrorBoundary>
+        {currentView === 'dashboard' && <Dashboard />}
+        {currentView === 'resume' && <ResumeBuilder />}
+        {currentView === 'resume-analyzer' && <ResumeAnalyzer />}
+        {currentView === 'cover-letter' && <CoverLetterGenerator />}
+        {currentView === 'interview' && <InterviewCoach />}
+        {currentView === 'progress' && <ProgressTracker />}
+        {currentView === 'documents' && <DocumentHistory />}
+        {currentView === 'profile' && <ProfileView />}
+      </ErrorBoundary>
       <Navbar />
       <CareerGuide />
     </div>

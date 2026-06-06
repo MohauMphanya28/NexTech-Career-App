@@ -379,16 +379,31 @@ export default function CoverLetterGenerator() {
 
   // ── Auto-generate from resume flow ──────────────────────────────────────
   useEffect(() => {
-    if (pendingCoverLetterGenerate && isFormValid && !autoGenerateRef.current && phase === 'input') {
+    if (pendingCoverLetterGenerate && !autoGenerateRef.current && phase === 'input') {
       autoGenerateRef.current = true
       setPendingCoverLetterGenerate(false)
-      // Small delay to let the UI render before starting generation
-      const timer = setTimeout(() => {
-        handleGenerate()
-      }, 600)
-      return () => clearTimeout(timer)
+
+      if (isFormValid) {
+        // Small delay to let the UI render before starting generation
+        const timer = setTimeout(() => {
+          handleGenerate()
+        }, 600)
+        return () => clearTimeout(timer)
+      } else {
+        // Fallback: pre-fill from user profile since resume has no experience entries
+        const storeState = useAppStore.getState()
+        if (!localJobTitle && storeState.user?.careerGoal) {
+          setLocalJobTitle(storeState.user.careerGoal)
+          setCoverLetterJobTitle(storeState.user.careerGoal)
+        }
+        if (!localCompany && storeState.user?.field) {
+          setLocalCompany(storeState.user.field)
+          setCoverLetterCompany(storeState.user.field)
+        }
+        toast.info('Fill in the job title and company to generate your cover letter.', { duration: 5000 })
+      }
     }
-  }, [pendingCoverLetterGenerate, isFormValid, phase, handleGenerate, setPendingCoverLetterGenerate])
+  }, [pendingCoverLetterGenerate, isFormValid, phase, handleGenerate, setPendingCoverLetterGenerate, localJobTitle, localCompany, setCoverLetterJobTitle, setCoverLetterCompany])
 
   // ── Phase: Input ─────────────────────────────────────────────────────────
 
@@ -840,9 +855,9 @@ export default function CoverLetterGenerator() {
             </p>
           </div>
           <Button
-            onClick={() => {
-              handleSave()
-              setTimeout(() => setCurrentView('interview'), 300)
+            onClick={async () => {
+              await handleSave()
+              setCurrentView('interview')
             }}
             className="mt-1 gap-2 bg-purple-500 text-white hover:bg-purple-400 rounded-xl h-12"
             size="lg"

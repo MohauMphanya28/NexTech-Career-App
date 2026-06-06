@@ -535,6 +535,7 @@ export default function ResumeBuilder() {
 
   const handleSave = useCallback(async () => {
     setIsLoading(true)
+    const storeState = useAppStore.getState()
     try {
       const resumeData = {
         id: currentResume?.id || uid(),
@@ -586,7 +587,6 @@ export default function ResumeBuilder() {
 
       // Save to database for document history
       try {
-        const storeState = useAppStore.getState()
         // Resolve the real DB user ID — prefer dbUserId, then fetch from API
         let userId = storeState.dbUserId
         if (!userId) {
@@ -648,7 +648,6 @@ export default function ResumeBuilder() {
 
       // Update user data on the backend (use PUT if user exists)
       try {
-        const storeState = useAppStore.getState()
         const existingUserId = storeState.dbUserId
         if (existingUserId) {
           await fetch('/api/user', {

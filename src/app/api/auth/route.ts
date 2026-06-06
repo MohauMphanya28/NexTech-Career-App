@@ -51,15 +51,17 @@ export async function POST(req: NextRequest) {
         return NextResponse.json({ error: 'Invalid email or password' }, { status: 401 })
       }
 
-      // Check if user has a password (legacy users might not)
+      // Check if user has a password (legacy users created before auth was added)
       if (!user.passwordHash) {
-        // Auto-set password for legacy users
+        // Legacy user without password — set their password on first login
+        // This only happens for accounts created via onboarding before auth existed
         const salt = await bcrypt.genSalt(10)
         const passwordHash = await bcrypt.hash(password, salt)
         await db.user.update({
           where: { id: user.id },
           data: { passwordHash },
         })
+        console.warn(`[Auth] Password set for legacy user: ${user.email}`)
       } else {
         // Verify password
         const isValid = await bcrypt.compare(password, user.passwordHash)

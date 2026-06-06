@@ -1,20 +1,21 @@
 'use client'
 
-import { LayoutDashboard, FileText, Mail, Mic, FolderOpen, User } from 'lucide-react'
+import { LayoutDashboard, FileText, Mail, Mic, FolderOpen, User, Search, TrendingUp } from 'lucide-react'
 import { useAppStore, type AppView } from '@/lib/store'
 
 interface NavTab {
   id: AppView
   label: string
   icon: React.ComponentType<{ className?: string }>
+  matchViews?: AppView[] // Additional views that should highlight this tab
 }
 
 const tabs: NavTab[] = [
   { id: 'dashboard', label: 'Home', icon: LayoutDashboard },
-  { id: 'resume', label: 'Resume', icon: FileText },
+  { id: 'resume', label: 'Resume', icon: FileText, matchViews: ['resume-analyzer'] },
   { id: 'cover-letter', label: 'Letter', icon: Mail },
   { id: 'interview', label: 'Interview', icon: Mic },
-  { id: 'documents', label: 'My Docs', icon: FolderOpen },
+  { id: 'documents', label: 'My Docs', icon: FolderOpen, matchViews: ['progress'] },
   { id: 'profile', label: 'Profile', icon: User },
 ]
 
@@ -29,7 +30,7 @@ export default function Navbar() {
     >
       <div className="mx-auto flex max-w-lg items-center justify-around px-1 py-2">
         {tabs.map((tab) => {
-          const isActive = currentView === tab.id
+          const isActive = currentView === tab.id || tab.matchViews?.includes(currentView)
           const Icon = tab.icon
 
           return (
