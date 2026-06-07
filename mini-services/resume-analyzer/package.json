@@ -1,1 +1,20 @@
-{"name":"resume-analyzer-service","version":"1.0.0","private":true,"scripts":{"dev":"bun --hot index.ts"},"dependencies":{"z-ai-web-dev-sdk":"latest","pdf-parse":"^2.4.5","mammoth":"^1.12.0"}}
+{
+  "name": "resume-analyzer-service",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "dev": "npx tsx watch index.ts",
+    "build": "npx tsx --eval \"const fs=require('fs'),ts=require('typescript');const src=fs.readFileSync('index.ts','utf8');const r=ts.transpileModule(src,{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2020,esModuleInterop:true}});fs.writeFileSync('index.js',r.outputText);console.log('Built index.js')\"",
+    "start": "node index.js"
+  },
+  "dependencies": {
+    "express": "^4.21.0",
+    "unpdf": "^1.6.2",
+    "mammoth": "^1.12.0"
+  },
+  "devDependencies": {
+    "@types/express": "^5.0.0",
+    "tsx": "^4.19.0",
+    "typescript": "^5"
+  }
+}

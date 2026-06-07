@@ -143,3 +143,40 @@ Stage Summary:
 - Subsequent requests: ~5ms (AI service marked as down, fallback used immediately)
 - Full interview flow (start → evaluate × N → complete) works end-to-end with fallback
 - `historyMessages` ReferenceError fixed
+
+---
+Task ID: 19
+Agent: Main
+Task: Convert mini-service from Bun to Node.js/Express so project runs without Bun
+
+Work Log:
+- Read existing mini-service code (Bun.serve() based, port 3031, PDF/DOCX/TXT extraction)
+- Discovered the main Next.js app does NOT call the mini-service — it handles extraction itself via /api/ai/resume-analyze route (using unpdf + mammoth)
+- Rewrote mini-service using Express.js instead of Bun.serve()
+- Replaced pdf-parse with unpdf (same as main app — pdf-parse caused crashes with invalid PDFs)
+- Updated package.json: replaced Bun dev script with tsx watch, added express/unpdf deps, removed z-ai-web-dev-sdk
+- Added build script that compiles TS→JS via TypeScript transpiler
+- Added process-level error handlers (uncaughtException, unhandledRejection)
+- Added health check endpoint (GET /health)
+- Compiled and ran comprehensive test suite (10/10 tests passed):
+  - Health check ✅
+  - TXT extraction ✅
+  - Missing fields (400) ✅
+  - Missing mimeType (400) ✅
+  - DOCX extraction ✅
+  - Invalid PDF graceful error (400) ✅
+  - OPTIONS preflight (204) ✅
+  - CORS headers ✅
+  - 10 sequential requests ✅
+  - Service stability ✅
+- Tested integration via Caddy gateway (XTransformPort=3031) ✅
+- Tested main app's /api/ai/resume-analyze with TXT and DOCX files ✅
+- Browser tested full app flow: login → dashboard → resume analyzer page visible ✅
+- Cleaned up old Bun-specific files (test-service.ts, service.js, extract-docx.js, etc.)
+- Zero lint errors in src/ directory
+
+Stage Summary:
+- Mini-service now runs with plain Node.js + npm (no Bun needed)
+- Commands: `npm install && npm run build && npm start` (or `npm run dev` for development)
+- Main app + mini-service both work without Bun
+- unpdf replaces pdf-parse (more stable, same library used by main app)
