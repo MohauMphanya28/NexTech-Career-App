@@ -244,60 +244,6 @@ const scoreRevealVariants = {
   },
 }
 
-// ─── Fetch with Retry ───────────────────────────────────────────────────────
-// Retries transient network failures, HTTP 429 (rate limiting), and 5xx server
-// errors up to 3 times with exponential backoff before giving up.
-// For 429 errors, uses longer backoff: 2s, 4s, 8s
-// For 5xx errors, uses standard backoff: 500ms, 1s, 2s
-// Non-retryable HTTP errors (4xx except 429) are returned as-is.
-
-async function fetchWithRetry(
-  url: string,
-  options: RequestInit,
-  maxRetries = 3,
-  baseDelay = 500,
-): Promise<Response> {
-  let lastError: Error | null = null
-
-  for (let attempt = 0; attempt < maxRetries; attempt++) {
-    try {
-      const res = await fetch(url, options)
-
-      // Retry on rate limiting (429) and server errors (5xx)
-      if (res.status === 429 || (res.status >= 500 && res.status <= 599)) {
-        // Use longer backoff for rate limiting: 2s, 4s, 8s
-        // Standard backoff for 5xx: 500ms, 1s, 2s
-        const retryDelay = res.status === 429 ? 2000 * Math.pow(2, attempt) : baseDelay * Math.pow(2, attempt)
-        console.warn(`HTTP ${res.status}, retrying in ${retryDelay}ms (attempt ${attempt + 1}/${maxRetries})`)
-        if (attempt < maxRetries - 1) {
-          await new Promise((resolve) => setTimeout(resolve, retryDelay))
-          continue
-        }
-      }
-
-      return res
-    } catch (err) {
-      lastError = err instanceof Error ? err : new Error(String(err))
-      // Only retry on network errors (Failed to fetch, NetworkError, etc.)
-      const isNetworkError =
-        lastError.message.includes('Failed to fetch') ||
-        lastError.message.includes('NetworkError') ||
-        lastError.message.includes('Network request failed') ||
-        lastError.name === 'TypeError'
-
-      if (!isNetworkError || attempt === maxRetries - 1) {
-        throw lastError
-      }
-
-      // Exponential backoff: 500ms, 1000ms, 2000ms...
-      const delay = baseDelay * Math.pow(2, attempt)
-      await new Promise((resolve) => setTimeout(resolve, delay))
-    }
-  }
-
-  throw lastError
-}
-
 // ─── WAV Encoding Utilities ─────────────────────────────────────────────────
 // Convert browser-recorded audio to WAV format for the ASR API
 // (The ASR API requires WAV or WebM, but format detection from base64 can fail.
@@ -952,16 +898,32 @@ export default function InterviewCoach() {
       setIsAiBuffering(true)
       setIsAiSpeaking(false)
 
-      const res = await fetchWithRetry('/api/ai/tts', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          text,
-          voice: selectedInterviewer.voice,
-          speed: selectedInterviewer.speed,
-          volume: selectedInterviewer.volume,
-        }),
-      })
+      // Use a timed fetch so we fail fast when TTS is unreachable
+      // (fetchWithRetry would retry 3 times causing long delays)
+      const ttsController = new AbortController()
+      const ttsTimeoutId = setTimeout(() => ttsController.abort(new DOMException('TTS request timed out', 'TimeoutError')), 15000)
+
+      let res: Response
+      try {
+        res = await fetch('/api/ai/tts', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            text,
+            voice: selectedInterviewer.voice,
+            speed: selectedInterviewer.speed,
+            volume: selectedInterviewer.volume,
+          }),
+          signal: ttsController.signal,
+        })
+        clearTimeout(ttsTimeoutId)
+      } catch (ttsErr) {
+        clearTimeout(ttsTimeoutId)
+        // Timeout or network error — degrade silently (text is still visible)
+        console.warn('TTS fetch failed:', ttsErr instanceof Error ? ttsErr.message : String(ttsErr))
+        setIsAiBuffering(false)
+        return
+      }
 
       if (!res.ok) {
         const errorData = await res.json().catch(() => ({}))
@@ -1197,8 +1159,9 @@ export default function InterviewCoach() {
 
           // Use a timed fetch instead of fetchWithRetry so we fail fast
           // when the ASR service is unreachable (avoids long retry delays)
+          const ASR_TIMEOUT_MS = 10000
           const asrController = new AbortController()
-          const asrTimeout = setTimeout(() => asrController.abort(), 10000) // 10s timeout
+          const asrTimeoutId = setTimeout(() => asrController.abort(new DOMException('ASR request timed out', 'TimeoutError')), ASR_TIMEOUT_MS)
 
           let asrData: { success?: boolean; transcription?: string; isEmpty?: boolean; error?: string }
 
@@ -1212,7 +1175,7 @@ export default function InterviewCoach() {
               }),
               signal: asrController.signal,
             })
-            clearTimeout(asrTimeout)
+            clearTimeout(asrTimeoutId)
 
             if (!asrRes.ok) {
               const errData = await asrRes.json().catch(() => ({}))
@@ -1233,8 +1196,23 @@ export default function InterviewCoach() {
             }
 
             asrData = await asrRes.json()
-          } catch (fetchErr) {
-            clearTimeout(asrTimeout)
+          } catch (fetchErr: unknown) {
+            clearTimeout(asrTimeoutId)
+            // Handle timeout and abort errors gracefully — no console spam
+            const err = fetchErr instanceof Error ? fetchErr : new Error(String(fetchErr))
+            if (err.name === 'TimeoutError' || err.name === 'AbortError' || err.message.includes('timed out')) {
+              // ASR service is slow/unreachable — switch to text input
+              setInputMode('text')
+              const timeoutMsg: ChatMessage = {
+                id: `system-asr-timeout-${Date.now()}`,
+                role: 'feedback',
+                content: 'Voice transcription timed out. Switched to text input — please type your answer.',
+                timestamp: Date.now(),
+              }
+              setMessages((prev) => [...prev, timeoutMsg])
+              setIsTranscribing(false)
+              return // Exit onstop handler early
+            }
             throw fetchErr
           }
 
@@ -1324,47 +1302,65 @@ export default function InterviewCoach() {
 
     setIsLoading(true)
     setAiTyping(true)
-    setMode('interview')
+    // Don't switch to interview mode yet — wait for the first question
+    // so the user never sees an empty "Ready for your answer" state
     setMessages([])
     setLiveScores({ relevance: 0, clarity: 0, confidence: 0 })
     setCurrentQuestionNum(1)
     setInterviewDuration(0)
 
     try {
-      const res = await fetchWithRetry('/api/ai/interview', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          action: 'start',
-          industry: selectedIndustry,
-          totalQuestions: questionCount,
-          interviewerPersonality: selectedInterviewer.personality,
-          interviewerName: selectedInterviewer.name,
-          candidateContext: (careerContext.resumeCompleted || careerContext.coverLetterCompleted) ? {
-            jobTitle: careerContext.resumeJobTitle || careerContext.coverLetterJobTitle,
-            company: careerContext.resumeCompany || careerContext.coverLetterCompany,
-            summary: careerContext.resumeSummary,
-            skills: careerContext.resumeSkills,
-            experience: careerContext.resumeExperience,
-            education: careerContext.resumeEducation,
-            hasCoverLetter: careerContext.coverLetterCompleted,
-            coverLetterJobTitle: careerContext.coverLetterJobTitle,
-            coverLetterCompany: careerContext.coverLetterCompany,
-          } : null,
-        }),
-      })
+      // Use a timed fetch instead of fetchWithRetry so we fail fast
+      // (fetchWithRetry retries 3x on 5xx, causing 30+ second delays)
+      const startController = new AbortController()
+      const startTimeoutId = setTimeout(() => startController.abort(new DOMException('Interview start timed out', 'TimeoutError')), 15000)
+
+      let res: Response
+      try {
+        res = await fetch('/api/ai/interview', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            action: 'start',
+            industry: selectedIndustry,
+            totalQuestions: questionCount,
+            interviewerPersonality: selectedInterviewer.personality,
+            interviewerName: selectedInterviewer.name,
+            candidateContext: (careerContext.resumeCompleted || careerContext.coverLetterCompleted) ? {
+              jobTitle: careerContext.resumeJobTitle || careerContext.coverLetterJobTitle,
+              company: careerContext.resumeCompany || careerContext.coverLetterCompany,
+              summary: careerContext.resumeSummary,
+              skills: careerContext.resumeSkills,
+              experience: careerContext.resumeExperience,
+              education: careerContext.resumeEducation,
+              hasCoverLetter: careerContext.coverLetterCompleted,
+              coverLetterJobTitle: careerContext.coverLetterJobTitle,
+              coverLetterCompany: careerContext.coverLetterCompany,
+            } : null,
+          }),
+          signal: startController.signal,
+        })
+        clearTimeout(startTimeoutId)
+      } catch (fetchErr) {
+        clearTimeout(startTimeoutId)
+        throw fetchErr
+      }
 
       if (!res.ok) {
         let errorMsg = 'Could not start interview. Please try again.'
         try { const e = await res.json(); errorMsg = e.error || errorMsg } catch { errorMsg = `Server error (${res.status}). Please try again.` }
         toast.error(errorMsg)
         setAiTyping(false)
-        return
+        setIsLoading(false)
+        return // Stay on setup screen
       }
 
       const data = await res.json()
 
       if (data.success) {
+        // Only now switch to interview mode — the question is ready
+        setMode('interview')
+
         const welcomeMsg: ChatMessage = {
           id: `ai-${Date.now()}`,
           role: 'ai',
@@ -1394,17 +1390,14 @@ export default function InterviewCoach() {
           currentQuestion: 1,
           totalQuestions: questionCount,
         })
+      } else {
+        // API returned success:false — stay on setup screen
+        toast.error('Could not start interview. Please try again.')
       }
     } catch (error) {
       console.error('Failed to start interview:', error)
-      const errorMsg: ChatMessage = {
-        id: `ai-${Date.now()}`,
-        role: 'ai',
-        content: "Hi there! I'm your interview coach. Let's start — tell me about yourself and why you're interested in this field.",
-        timestamp: Date.now(),
-      }
-      setMessages([errorMsg])
-      playTTS(errorMsg.content)
+      // Stay on setup screen — show error toast instead of broken interview
+      toast.error('Could not connect to interview service. Please check your connection and try again.')
     } finally {
       setIsLoading(false)
       setAiTyping(false)
@@ -1447,31 +1440,43 @@ export default function InterviewCoach() {
         content: msg.content,
       }))
 
-      const res = await fetchWithRetry('/api/ai/interview', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          action: 'evaluate',
-          industry: selectedIndustry,
-          questionNumber: questionNum,
-          answer,
-          totalQuestions: questionCount,
-          interviewerPersonality: selectedInterviewer.personality,
-          interviewerName: selectedInterviewer.name,
-          conversationHistory,
-          candidateContext: (careerContext.resumeCompleted || careerContext.coverLetterCompleted) ? {
-            jobTitle: careerContext.resumeJobTitle || careerContext.coverLetterJobTitle,
-            company: careerContext.resumeCompany || careerContext.coverLetterCompany,
-            summary: careerContext.resumeSummary,
-            skills: careerContext.resumeSkills,
-            experience: careerContext.resumeExperience,
-            education: careerContext.resumeEducation,
-            hasCoverLetter: careerContext.coverLetterCompleted,
-            coverLetterJobTitle: careerContext.coverLetterJobTitle,
-            coverLetterCompany: careerContext.coverLetterCompany,
-          } : null,
-        }),
-      })
+      // Use a timed fetch instead of fetchWithRetry so we fail fast
+      const evalController = new AbortController()
+      const evalTimeoutId = setTimeout(() => evalController.abort(new DOMException('Evaluation timed out', 'TimeoutError')), 20000)
+
+      let res: Response
+      try {
+        res = await fetch('/api/ai/interview', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            action: 'evaluate',
+            industry: selectedIndustry,
+            questionNumber: questionNum,
+            answer,
+            totalQuestions: questionCount,
+            interviewerPersonality: selectedInterviewer.personality,
+            interviewerName: selectedInterviewer.name,
+            conversationHistory,
+            candidateContext: (careerContext.resumeCompleted || careerContext.coverLetterCompleted) ? {
+              jobTitle: careerContext.resumeJobTitle || careerContext.coverLetterJobTitle,
+              company: careerContext.resumeCompany || careerContext.coverLetterCompany,
+              summary: careerContext.resumeSummary,
+              skills: careerContext.resumeSkills,
+              experience: careerContext.resumeExperience,
+              education: careerContext.resumeEducation,
+              hasCoverLetter: careerContext.coverLetterCompleted,
+              coverLetterJobTitle: careerContext.coverLetterJobTitle,
+              coverLetterCompany: careerContext.coverLetterCompany,
+            } : null,
+          }),
+          signal: evalController.signal,
+        })
+        clearTimeout(evalTimeoutId)
+      } catch (fetchErr) {
+        clearTimeout(evalTimeoutId)
+        throw fetchErr
+      }
 
       if (!res.ok) {
         let errorMsg = 'Could not evaluate answer. Please try again.'
@@ -1737,28 +1742,40 @@ export default function InterviewCoach() {
       setAiTyping(true)
 
       try {
-        const res = await fetchWithRetry('/api/ai/interview', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            action: 'start',
-            industry: selectedIndustry,
-            totalQuestions: questionCount,
-            interviewerPersonality: selectedInterviewer.personality,
-            interviewerName: selectedInterviewer.name,
-            candidateContext: careerContext.resumeCompleted ? {
-              jobTitle: careerContext.resumeJobTitle,
-              company: careerContext.resumeCompany,
-              summary: careerContext.resumeSummary,
-              skills: careerContext.resumeSkills,
-              experience: careerContext.resumeExperience,
-              education: careerContext.resumeEducation,
-              hasCoverLetter: careerContext.coverLetterCompleted,
-              coverLetterJobTitle: careerContext.coverLetterJobTitle,
-              coverLetterCompany: careerContext.coverLetterCompany,
-            } : null,
-          }),
-        })
+        // Use timed fetch instead of fetchWithRetry for fast failure
+        const nextQController = new AbortController()
+        const nextQTimeoutId = setTimeout(() => nextQController.abort(new DOMException('Next question timed out', 'TimeoutError')), 20000)
+
+        let res: Response
+        try {
+          res = await fetch('/api/ai/interview', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              action: 'start',
+              industry: selectedIndustry,
+              totalQuestions: questionCount,
+              interviewerPersonality: selectedInterviewer.personality,
+              interviewerName: selectedInterviewer.name,
+              candidateContext: careerContext.resumeCompleted ? {
+                jobTitle: careerContext.resumeJobTitle,
+                company: careerContext.resumeCompany,
+                summary: careerContext.resumeSummary,
+                skills: careerContext.resumeSkills,
+                experience: careerContext.resumeExperience,
+                education: careerContext.resumeEducation,
+                hasCoverLetter: careerContext.coverLetterCompleted,
+                coverLetterJobTitle: careerContext.coverLetterJobTitle,
+                coverLetterCompany: careerContext.coverLetterCompany,
+              } : null,
+            }),
+            signal: nextQController.signal,
+          })
+          clearTimeout(nextQTimeoutId)
+        } catch (fetchErr) {
+          clearTimeout(nextQTimeoutId)
+          throw fetchErr
+        }
 
         if (!res.ok) {
           try { await res.json() } catch {}

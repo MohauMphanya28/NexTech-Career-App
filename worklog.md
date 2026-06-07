@@ -97,3 +97,26 @@ Stage Summary:
 - Existing formatting preserved throughout
 - New list item matches document style (bold label + normal description, Times New Roman 12pt)
 - Document saved to original path: /home/z/my-project/public/downloads/Design_Thinking_Project_Document.docx
+
+---
+Task ID: 17
+Agent: Main
+Task: Fix runtime errors in InterviewCoach (toast undefined, AbortError, premature interview mode)
+
+Work Log:
+- Fixed `toast is not defined` ReferenceError — added `import { toast } from 'sonner'` to InterviewCoach.tsx
+- Fixed ASR AbortError "signal is aborted without reason" — replaced `asrController.abort()` with `asrController.abort(new DOMException('ASR request timed out', 'TimeoutError'))` and added graceful catch that auto-switches to text input on timeout
+- Fixed "interviewer expects a response before even asking anything" — moved `setMode('interview')` to AFTER the API returns successfully (was previously called before the fetch, causing users to see empty "Ready for your answer" state)
+- Replaced all `fetchWithRetry` calls with plain `fetch` + `AbortController` timeout (10-20s depending on endpoint) to fail fast instead of retrying 3x with exponential backoff (which caused 30+ second delays when AI service is unreachable)
+- Removed unused `fetchWithRetry` function definition from InterviewCoach.tsx
+- Added TTS timed fetch (15s timeout) with graceful degradation — clears isAiBuffering on timeout/network error
+- Added ASR route timeout handling — `withTimeout()` wrapper for ZAI init (5s) and ASR calls (15s), returns 503 with `fallback: 'text'` flag
+- Added auto-switch to text input when ASR returns 503 (service unavailable)
+- On API failure in handleStartInterview, user now stays on setup screen with toast error (instead of broken interview mode)
+
+Stage Summary:
+- All 4 fetchWithRetry calls replaced with timed fetch (ASR, TTS, interview start, interview evaluate, next question)
+- InterviewCoach no longer switches to interview mode until first question is available
+- ASR timeout gracefully auto-switches to text input mode
+- Zero console errors on page load and during interview flow
+- App verified via agent-browser — setup screen persists on API failure
