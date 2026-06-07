@@ -29,6 +29,7 @@ import {
 } from 'lucide-react'
 import { useAppStore, recordMilestone } from '@/lib/store'
 import InterviewAvatar from '@/components/career/InterviewAvatar'
+import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Card } from '@/components/ui/card'
@@ -1194,16 +1195,48 @@ export default function InterviewCoach() {
           // Convert recorded audio to WAV format for reliable ASR format detection
           const wavBase64 = await convertBlobToWavBase64(audioBlob)
 
-          const asrRes = await fetchWithRetry('/api/ai/asr', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              audioBase64: wavBase64,
-              audioFormat: 'audio/wav',
-            }),
-          })
+          // Use a timed fetch instead of fetchWithRetry so we fail fast
+          // when the ASR service is unreachable (avoids long retry delays)
+          const asrController = new AbortController()
+          const asrTimeout = setTimeout(() => asrController.abort(), 10000) // 10s timeout
 
-          const asrData = await asrRes.json()
+          let asrData: { success?: boolean; transcription?: string; isEmpty?: boolean; error?: string }
+
+          try {
+            const asrRes = await fetch('/api/ai/asr', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                audioBase64: wavBase64,
+                audioFormat: 'audio/wav',
+              }),
+              signal: asrController.signal,
+            })
+            clearTimeout(asrTimeout)
+
+            if (!asrRes.ok) {
+              const errData = await asrRes.json().catch(() => ({}))
+              // If the ASR service is unavailable (503), auto-switch to text input
+              if (asrRes.status === 503 || errData.fallback === 'text') {
+                setInputMode('text')
+                const switchMsg: ChatMessage = {
+                  id: `system-asr-unavail-${Date.now()}`,
+                  role: 'feedback',
+                  content: 'Voice recognition is currently unavailable. Switched to text input — please type your answer.',
+                  timestamp: Date.now(),
+                }
+                setMessages((prev) => [...prev, switchMsg])
+                setIsTranscribing(false)
+                return // Exit onstop handler early
+              }
+              throw new Error(errData.error || `ASR server error (${asrRes.status})`)
+            }
+
+            asrData = await asrRes.json()
+          } catch (fetchErr) {
+            clearTimeout(asrTimeout)
+            throw fetchErr
+          }
 
           if (asrData.success && asrData.transcription && !asrData.isEmpty) {
             setCurrentInput(asrData.transcription)

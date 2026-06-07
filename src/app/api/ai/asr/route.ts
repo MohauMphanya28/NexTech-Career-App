@@ -10,6 +10,19 @@ async function getZAI() {
   return zaiInstance
 }
 
+// ─── Timeout helper ──────────────────────────────────────────────────────────
+// Wraps a promise with a timeout so we fail fast when the AI service is
+// unreachable (e.g. ConnectTimeoutError) instead of hanging indefinitely.
+
+function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    const timer = setTimeout(() => reject(new Error(`${label} timed out after ${ms}ms`)), ms)
+    promise
+      .then((val) => { clearTimeout(timer); resolve(val) })
+      .catch((err) => { clearTimeout(timer); reject(err) })
+  })
+}
+
 // ─── Request Queue ──────────────────────────────────────────────────────────
 // Prevents overwhelming the ASR API by processing one request at a time.
 // If the queue exceeds MAX_QUEUE_SIZE, new requests receive HTTP 429.
@@ -45,19 +58,30 @@ function dequeueAsrRequest() {
 // Retries transient ASR SDK errors with exponential backoff.
 // Non-retryable errors (format/duration) are thrown immediately.
 
-async function asrWithRetry(zai: any, base64Data: string, maxRetries = 2, baseDelay = 1000): Promise<any> {
+async function asrWithRetry(zai: any, base64Data: string, maxRetries = 1, baseDelay = 1000): Promise<any> {
   let lastError: any
   for (let attempt = 0; attempt <= maxRetries; attempt++) {
     try {
-      return await zai.audio.asr.create({
-        file_base64: base64Data,
-        format: 'wav',
-      } as any)
+      // Wrap each ASR call in a timeout so we don't hang on network issues
+      return await withTimeout(
+        zai.audio.asr.create({
+          file_base64: base64Data,
+          format: 'wav',
+        } as any),
+        15000, // 15s timeout per ASR attempt
+        'ASR API call'
+      )
     } catch (error: any) {
       lastError = error
       const msg = error?.message || String(error)
-      // Don't retry on format/duration errors — these are user errors, not transient
-      if (msg.includes('unsupported') || msg.includes('时长限制') || /duration.*limit/i.test(msg)) {
+
+      // Don't retry on timeout, format/duration errors — these aren't transient
+      if (
+        msg.includes('timed out') ||
+        msg.includes('unsupported') ||
+        msg.includes('时长限制') ||
+        /duration.*limit/i.test(msg)
+      ) {
         throw error
       }
       if (attempt < maxRetries) {
@@ -88,7 +112,22 @@ export async function POST(req: NextRequest) {
       )
     }
 
-    const zai = await getZAI()
+    // Initialize ZAI with timeout — fail fast if the SDK can't connect
+    let zai: Awaited<ReturnType<typeof ZAI.create>>
+    try {
+      zai = await withTimeout(getZAI(), 5000, 'ZAI initialization')
+    } catch (initError) {
+      console.error('ASR ZAI init failed:', initError)
+      return NextResponse.json(
+        {
+          success: false,
+          error: 'Speech recognition service is currently unavailable. Please use text input instead.',
+          isEmpty: true,
+          fallback: 'text',
+        },
+        { status: 503 },
+      )
+    }
 
     // Strip data URL prefix if present (e.g., "data:audio/wav;base64,")
     // Note: Client-side now converts to WAV before sending, so format should be detectable
@@ -114,6 +153,17 @@ export async function POST(req: NextRequest) {
       })
     } catch (asrError: unknown) {
       const errorMessage = asrError instanceof Error ? asrError.message : String(asrError)
+
+      // If the error is about timeout (service unreachable)
+      if (errorMessage.includes('timed out')) {
+        console.error('ASR service timed out:', errorMessage)
+        return NextResponse.json({
+          success: false,
+          error: 'Speech recognition timed out. Please try again or use text input.',
+          isEmpty: true,
+          fallback: 'text',
+        }, { status: 503 })
+      }
 
       // If the error is about unsupported format
       if (errorMessage.includes('unsupported audio format') || errorMessage.includes('unknown')) {
