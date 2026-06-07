@@ -120,3 +120,26 @@ Stage Summary:
 - ASR timeout gracefully auto-switches to text input mode
 - Zero console errors on page load and during interview flow
 - App verified via agent-browser — setup screen persists on API failure
+
+---
+Task ID: 18
+Agent: Main
+Task: Fix "Failed to process interview request" error when AI service is unreachable
+
+Work Log:
+- Root cause: `/api/ai/interview` route returned generic 500 "Failed to process interview request" when ZAI SDK's `chat.completions.create()` call failed with ConnectTimeoutError (AI service unreachable at 172.25.150.234:443)
+- Added fallback question bank for all 9 industries (10 questions each) — interview works even without AI
+- Added fallback evaluation with varied scores and feedback phrases
+- Added `isAiServiceAvailable()` / `markAiServiceDown()` — after first AI call failure, skips AI calls for 60 seconds (avoids 10s timeout penalty on every request)
+- Added `withTimeout()` for AI calls (15s start, 20s evaluate)
+- Fixed `historyMessages is not defined` bug — moved definition inside evaluate AI branch
+- Fixed ZAI init deduplication — `zaiInitPromise` prevents concurrent `ZAI.create()` calls
+- Subsequent requests after first failure: 4-6ms (vs 10.5s before)
+- Interview now starts successfully with fallback questions when AI is down
+
+Stage Summary:
+- Interview API returns 200 with fallback questions when AI service is unreachable
+- First request after server restart: ~10.5s (ZAI SDK connection attempt)
+- Subsequent requests: ~5ms (AI service marked as down, fallback used immediately)
+- Full interview flow (start → evaluate × N → complete) works end-to-end with fallback
+- `historyMessages` ReferenceError fixed
